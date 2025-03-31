@@ -16,13 +16,15 @@ actual techniques to be used will have to be updated as we go
 
 # Exploratory Data Analysis
 
-We begin our investigation by exploring the structure of the data and its statistical properties, to better inform the choice of model.
+We begin by exploring the structure of the data and its statistical properties, to inform the choice of classification models.
 
 ## Dataset Structure
 
-The dataset is composed of metadata and training data tables, and the actual audio samples.
+The dataset is composed of metadata and training data tables, providing labels and information on the classification setting and the actual audio samples.
 
-The Metadata table is provides a translation between species id and its Binomial nomenclature, while the `training.csv` table provides  relevant information on each recordings, such as microphone type, recording location, a main label and some secondary labels with a variable degree of accuracy. Finally, all recordings are in the form of `.ogg` audio files, wherein most except 6. Recordings have variable length and quality, as they originate from different microphones - .
+The Metadata table provides a translation between species id and its Binomial nomenclature, while the `training.csv` table provides key metrics on each recording, such as microphone type, recording location, main label and some secondary additional labels which seem present in the audio, though with lower reliability. 
+
+All recordings are in the `.ogg` audio file format. The samples have variable length and quality, as they originate from different microphones, and a significant portion of them contain just a few seconds of relevant audio, followed by the spoken description of the recording setup and specifications.
 
 ## Classification Task and Limitations
 
@@ -32,11 +34,11 @@ As defined by the Cornell Lab of Ornithology, the final result of the study will
 - Internet access disabled
 - Freely & publicly available external data is allowed, including pre-trained models
 
-In this investigation, we do not include external data sources, nor GPU technology.
+In this investigation, we do not include external data sources, nor GPU technology in running the model.
 
 ## Data Polishing
 
-A non-negligeable portion of the training samples include a large portion
+
 
 ## Sound Event Detection
 
