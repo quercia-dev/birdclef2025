@@ -1,0 +1,47 @@
+# Markdown Syntax
+
+- Comment
+<!---
+actual techniques to be used will have to be updated as we go
+-->
+- Image: ![image info](.//image.png)
+
+
+# Abstract
+Animal species that are mobile and habitat-diverse are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. However, conducting "on the ground" biodiversity surveys is costly and logistically demanding. As an alternative strategy, some conservation campaigns have therefore opted to perform passive acoustic monitoring (PAM); the use of autonomous recording units to record audio data in the field. Through modern machine learning techniques, audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology directs a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides data to aid in the classification task: the samples from birdclef-2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we analyze the audio samples through dimensional reduction techniques such as Mel-Frequency Cepstral Coefficients (MFCC), Uniform Manifold Approximation (UMAP) and Variational Autoencoders (VAE). We tackle the classification task by first studying the performance of different architectures: we consider Sound Event Detection (SED) and Convolutional Neural Networks (CNN) for their efficiency, and some data polishing techniques. We also reduce our model size through optimizations such as Knowledge distillation and int8 quantization. Finally, we combine our models to produce a best classifier through a ranking scheme. We submit our model to the official institution website.
+
+<!---
+actual techniques to be used will have to be updated as we go
+-->
+
+# Exploratory Data Analysis
+
+We begin our investigation by exploring the structure of the data and its statistical properties, to better inform the choice of model.
+
+## Dataset Structure
+
+The dataset is composed of metadata and training data tables, and the actual audio samples.
+
+The Metadata table is provides a translation between species id and its Binomial nomenclature, while the `training.csv` table provides  relevant information on each recordings, such as microphone type, recording location, a main label and some secondary labels with a variable degree of accuracy. Finally, all recordings are in the form of `.ogg` audio files, wherein most except 6. Recordings have variable length and quality, as they originate from different microphones - .
+
+## Classification Task and Limitations
+
+As defined by the Cornell Lab of Ornithology, the final result of the study will be a classifier model, compliant with the following restrictions.
+- CPU Notebook <= 90 minutes run-time
+- GPU Notebook submissions are disabled. You can technically submit but will only have 1 minute of runtime.
+- Internet access disabled
+- Freely & publicly available external data is allowed, including pre-trained models
+
+In this investigation, we do not include external data sources, nor GPU technology.
+
+## Data Polishing
+
+A non-negligeable portion of the training samples include a large portion
+
+## Sound Event Detection
+
+## Audio Visualisation 
+
+# Classification Task 
+
+# Sources
