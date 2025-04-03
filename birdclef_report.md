@@ -26,6 +26,10 @@ The Metadata table provides a translation between species id and its Binomial no
 
 All recordings are in the `.ogg` audio file format. The samples have variable length and quality, as they originate from different microphones, and a significant portion of them contain just a few seconds of relevant audio, followed by the spoken description of the recording setup and specifications.
 
+## File characteristics
+
+Average size of the files, duration of the audio tracks. Human vs Bird...
+
 ## Classification Task and Limitations
 
 As defined by the Cornell Lab of Ornithology, the final result of the study will be a classifier model, compliant with the following restrictions.
@@ -36,14 +40,14 @@ As defined by the Cornell Lab of Ornithology, the final result of the study will
 
 In this investigation, we do not include external data sources, nor GPU technology in running the model.
 
-## Data Polishing
-
-
+# Data Preprocessing
 
 ## Sound Event Detection
 
 ## Audio Visualisation 
 
 # Classification Task 
+
+# Model Evaluation
 
 # Sources
