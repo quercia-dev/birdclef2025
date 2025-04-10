@@ -48,6 +48,6 @@ if __name__ == "__main__":
 
     end_time = time.time()
 
-print(f'Processed {total} audio files.')
-print(f'Cropped and saved {sum(results)} snippets.')
-print(f'Total time: {end_time - start_time:.2f} seconds.')
+    print(f'Processed {total} audio files.')
+    print(f'Cropped and saved {sum(results)} snippets.')
+    print(f'Total time: {end_time - start_time:.2f} seconds.')
