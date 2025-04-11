@@ -1,5 +1,6 @@
 data/
-train_raw5/
+lightning_logs/
+.venv/
 
 .DS_Store
 
