@@ -103,3 +103,31 @@ def spectrogram(dataset: Dataset, index: int, clusters: Optional[pd.Series] = No
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_training_log(csv_path):
+    # Read CSV
+    df = pd.read_csv(csv_path)
+
+    # Plot
+    fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    # Accuracy
+    axs[0].plot(df['step'], df['train_acc'], label='Train Accuracy', marker='o')
+    axs[0].plot(df['step'], df['val_acc'], label='Val Accuracy', marker='x', linestyle='--')
+    axs[0].set_ylabel('Accuracy')
+    axs[0].set_title('Training and Validation Accuracy')
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # Loss
+    axs[1].plot(df['step'], df['train_loss'], label='Train Loss', marker='o')
+    axs[1].plot(df['step'], df['val_loss'], label='Val Loss', marker='x', linestyle='--')
+    axs[1].set_xlabel('Step')
+    axs[1].set_ylabel('Loss')
+    axs[1].set_title('Training and Validation Loss')
+    axs[1].legend()
+    axs[1].grid(True)
+
+    plt.tight_layout()
+    plt.show()

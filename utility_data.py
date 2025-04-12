@@ -12,13 +12,13 @@ import numpy as np
 
 class AudioDataset(torch.utils.data.Dataset):
     def __init__(self, datafolder:str="data", metadata_csv: str="train.csv", audio_dir: str="train_audio",
-                 transform=None, metadata: bool=False, extract_features=False,
-                 feature_size: int=316, sample_rate: int=32000):
+                 transform=None, metadata: bool=False, extract_features=False, audio_params: dict=None):
         """
         metadata_csv: path to train.csv
         audio_dir: path to train_audio/
         transform: transform for waveform
         extract_features: whether to exract rich feature set for CNN
+        audio_params: parameters for audio features
         feature_size: target width for feature padding
         sample_rate: target sample rate for audio processing
         """
@@ -27,17 +27,17 @@ class AudioDataset(torch.utils.data.Dataset):
         self.audio_dir = os.path.join(datafolder, audio_dir) 
         self.transform = transform
         self.extract_features = extract_features
-        self.feature_size = feature_size
-        self.sample_rate = sample_rate
+        params = [audio_params[k] for k in ["sample_rate", "n_fft", "hop_length", "n_mfcc", "n_mels", "feature_size"]]
+        self.sample_rate, self.n_fft, self.hop_length, self.n_mfcc, self.n_mels, self.feature_size = params
 
         if metadata_csv == "":
-            self.data = load_audio_data(self.audio_dir)
+            self.data = self._load_audio_data(self.audio_dir)
         else:
             self.data = pd.read_csv(os.path.join(datafolder, metadata_csv))
             
         if metadata:
             metadata_df = self.data["filename"].apply(
-                lambda filename: get_audio_metadata(os.path.join(self.audio_dir, filename))
+                lambda filename: self._get_audio_metadata(os.path.join(self.audio_dir, filename))
             )
             # Unpack the dictionary and assign to new columns
             metadata_df = pd.DataFrame(metadata_df.tolist())
@@ -62,7 +62,7 @@ class AudioDataset(torch.utils.data.Dataset):
         if self.extract_features:
             try:
                 # Extract rich feature set for CNN
-                features = self._prepare_features(audio_path)
+                features = self.generate_features(audio_path)
                 # Convert to torch tensor
                 features_tensor = torch.tensor(features, dtype=torch.float32)
                 features_tensor = features_tensor.permute(2, 0, 1)  # [channels, height, width]
@@ -73,7 +73,7 @@ class AudioDataset(torch.utils.data.Dataset):
                 return torch.zeros(4, 128, self.feature_size), label
         else:
             try:
-                waveform, sample_rate = torchaudio.load(audio_path)
+                waveform, _ = torchaudio.load(audio_path)
                 # apply any transformation if specified
                 if self.transform:
                     waveform = self.transform(waveform)
@@ -117,73 +117,6 @@ class AudioDataset(torch.utils.data.Dataset):
         label = self.class_to_idx[row["primary_label"]] if "primary_label" in row else -1
         return features, label
 
-    def prepare_dataset_from_indices(self, indices):
-        """
-        Create a TensorDataset from specific indices of this dataset
-        
-        Parameters:
-        -----------
-        indices: list of indices to include
-        
-        Returns:
-        --------
-        torch.utils.data.TensorDataset: Dataset containing features and labels
-    """
-        features = []
-        targets = []
-        
-        for idx in indices:
-            feature_tensor, label = self[idx]
-            features.append(feature_tensor)
-            targets.append(label)
-        
-        # Create dataset
-        return torch.utils.data.TensorDataset(
-            torch.stack(features),
-            torch.tensor(targets)
-        )
-
-    def prepare_dataset_from_files(self, audio_files, labels):
-        """
-        Create a dataset from specified audio files and labels
-        
-        Parameters:
-        -----------
-        audio_files: list of paths to audio files
-        labels: list of labels corresponding to audio files
-        
-        Returns:
-        --------
-        torch.utils.data.TensorDataset: Dataset containing features and labels
-        """
-        features = []
-        targets = []
-        
-        for audio_path, label in zip(audio_files, labels):
-            if self.extract_features:
-                # Extract features
-                feature_image = self._prepare_features(audio_path)
-                
-                # Convert to PyTorch tensor with channels first
-                feature_tensor = torch.tensor(feature_image).float()
-                feature_tensor = feature_tensor.permute(2, 0, 1)  # [channels, height, width]
-            else:
-                # Load waveform
-                waveform, _ = torchaudio.load(audio_path)
-                if self.transform:
-                    feature_tensor = self.transform(waveform)
-                else:
-                    feature_tensor = waveform
-            
-            features.append(feature_tensor)
-            targets.append(label)
-        
-        # Create dataset
-        return torch.utils.data.TensorDataset(
-            torch.stack(features),
-            torch.tensor(targets)
-        )
-
     def _get_audio_metadata(self, audio_path):
         """Extract metadata from audio file"""
         try:
@@ -214,61 +147,92 @@ class AudioDataset(torch.utils.data.Dataset):
 
     def _padding(self, array, xx, yy):
         """
-        Pad array to specified dimensions
+        Pad or trim array to specified dimensions
         :param array: numpy array
         :param xx: desired height
         :param yy: desired width
-        :return: padded array
+        :return: padded or trimmed array
         """
-        h = array.shape[0]
-        w = array.shape[1]
+        h, w = array.shape[0], array.shape[1]
         
+        # If array is already equal to or wider than target, just trim to target width
+        if w >= yy:
+            # Center the content when trimming
+            start_idx = (w - yy) // 2
+            return array[:, start_idx:start_idx+yy]
+        
+        # If array is narrower, pad to target width
         a = max((xx - h) // 2, 0)
         aa = max(0, xx - a - h)
         b = max(0, (yy - w) // 2)
         bb = max(yy - b - w, 0)
         
+        # Print debug info to understand the padding dimensions
+        print(f"Padding shape: Original={array.shape}, Target=({xx},{yy}), Pads=({a},{aa},{b},{bb})")
+        
         return np.pad(array, pad_width=((a, aa), (b, bb)), mode='constant')
 
-    def _prepare_features(self, audio_path):
-        """
-        Load audio file and extract features
-        :return: processed feature image with shape [height, width, channels]
-        """
-        y, sr = librosa.load(audio_path, sr=self.sample_rate)
+    def generate_features(self, audio_path):
+        try: 
+            #max_size=1000 #my max audio file feature width
 
-        # Short-time fourier transform
-        stft = np.abs(librosa.stft(y, n_fft=255, hop_length=512))
-        stft_padded = self._padding(stft, 128, self.feature_size)
+            y_cut, _ = librosa.load(audio_path, sr=self.sample_rate)
 
-        # MFCCs
-        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_fft=255, hop_length=512, n_mfcc=128)
-        mfccs_padded = self._padding(mfccs, 128, self.feature_size)
-        
-        # spectral centroid
-        spec_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
-        spec_centroid_norm = self._normalize(spec_centroid)
-        
-        # chroma features
-        chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr)
-        chroma_stft_norm = self._normalize(chroma_stft)
-        
-        # spectral bandwidth
-        spec_bw = librosa.feature.spectral_bandwidth(y=y, sr=sr)[0]
-        spec_bw_norm = self._normalize(spec_bw)
+            # Check if audio loaded properly
+            if np.all(y_cut == 0) or len(y_cut) == 0:
+                print(f"Warning: Audio file {audio_path} loaded as silence or empty")
+                return np.zeros((128, self.feature_size, 3))
+                
+            
+            mel_spec = librosa.feature.melspectrogram(
+                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length, n_mels=self.n_mels
+            )
+            mel_spec = self._normalize(np.abs(mel_spec))
+            mel_spec = self._padding(np.abs(mel_spec), 128, self.feature_size)
 
-        # build image layers
-        image = np.array([self._padding(spec_bw_norm.reshape(1, -1), 1, self.feature_size)]).reshape(1, self.feature_size)
-        image = np.append(image, self._padding(spec_centroid_norm.reshape(1, -1), 1, self.feature_size), axis=0)
+            MFCCs = librosa.feature.mfcc(
+            y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, 
+            hop_length=self.hop_length, n_mfcc=self.n_mfcc
+            )
+            MFCCs = self._normalize(MFCCs) 
+            MFCCs = self._padding(MFCCs, 128, self.feature_size)
+            
 
-        # repeat padded features
-        for i in range(0, 9):
-            image = np.append(image, self._padding(spec_bw_norm.reshape(1, -1), 1, self.feature_size), axis=0)
-            image = np.append(image, self._padding(spec_centroid_norm.reshape(1, -1), 1, self.feature_size), axis=0)
-            image = np.append(image, self._padding(chroma_stft_norm, 12, self.feature_size), axis=0)
-        
-        # Stack features as channels
-        image = np.dstack((image, stft_padded))
-        image = np.dstack((image, mfccs_padded))
+            spec_centroid = librosa.feature.spectral_centroid(
+            y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
+            )
+            spec_centroid = self._padding(self._normalize(spec_centroid), 1, self.feature_size)
+            
+            chroma_stft = librosa.feature.chroma_stft(
+                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
+            )
+            chroma_stft = self._padding(self._normalize(chroma_stft), 12, self.feature_size)
+            
+            spec_bw = librosa.feature.spectral_bandwidth(
+                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
+            )
+            spec_bw = self._padding(self._normalize(spec_bw), 1, self.feature_size)
 
-        return image
+            #Now the padding part
+            channel1 = spec_bw
+            channel1 = np.concatenate((channel1, spec_centroid), axis=0)
+            rows_filled = channel1.shape[0]
+            while rows_filled < 116: # 128 - 12 for chroma
+                channel1 = np.concatenate((channel1, spec_bw), axis=0)
+                rows_filled += 1
+                if rows_filled < 116:
+                    channel1 = np.concatenate((channel1, spec_centroid), axis=0)
+                    rows_filled += 1
+
+            # Add chroma at the end
+            channel1 = np.concatenate((channel1, chroma_stft), axis=0)
+            
+            result = np.stack([channel1, mel_spec, MFCCs], axis=2)
+            
+            return result
+
+        except Exception as e:
+            print(f"Error in generating features for {audio_path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return np.zeros((128, self.feature_size, 3))
