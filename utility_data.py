@@ -167,72 +167,83 @@ class AudioDataset(torch.utils.data.Dataset):
         b = max(0, (yy - w) // 2)
         bb = max(yy - b - w, 0)
         
-        # Print debug info to understand the padding dimensions
-        print(f"Padding shape: Original={array.shape}, Target=({xx},{yy}), Pads=({a},{aa},{b},{bb})")
-        
         return np.pad(array, pad_width=((a, aa), (b, bb)), mode='constant')
 
     def generate_features(self, audio_path):
-        try: 
-            #max_size=1000 #my max audio file feature width
-
+        try:
+            # Load audio file
             y_cut, _ = librosa.load(audio_path, sr=self.sample_rate)
-
+            
             # Check if audio loaded properly
             if np.all(y_cut == 0) or len(y_cut) == 0:
                 print(f"Warning: Audio file {audio_path} loaded as silence or empty")
-                return np.zeros((128, self.feature_size, 3))
+                return np.zeros((64, self.feature_size, 3))
                 
-            
+            # Mel spectrogram
             mel_spec = librosa.feature.melspectrogram(
-                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length, n_mels=self.n_mels
+                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, 
+                hop_length=self.hop_length, n_mels=self.n_mels,
+                fmax=self.sample_rate/2 
             )
             mel_spec = self._normalize(np.abs(mel_spec))
-            mel_spec = self._padding(np.abs(mel_spec), 128, self.feature_size)
-
-            MFCCs = librosa.feature.mfcc(
-            y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, 
-            hop_length=self.hop_length, n_mfcc=self.n_mfcc
-            )
-            MFCCs = self._normalize(MFCCs) 
-            MFCCs = self._padding(MFCCs, 128, self.feature_size)
+            mel_spec = self._padding(mel_spec, self.n_mels, self.feature_size)
             
-
+            # MFCCs
+            MFCCs = librosa.feature.mfcc(
+                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft,
+                hop_length=self.hop_length, n_mfcc=self.n_mfcc
+            )
+            MFCCs = self._normalize(MFCCs)
+            MFCCs = self._padding(MFCCs, self.n_mfcc, self.feature_size)
+            
+            # Create third channel with combined spectral features
             spec_centroid = librosa.feature.spectral_centroid(
-            y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
+                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
             )
             spec_centroid = self._padding(self._normalize(spec_centroid), 1, self.feature_size)
             
+            # Chroma STFT (12 rows)
             chroma_stft = librosa.feature.chroma_stft(
                 y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
             )
             chroma_stft = self._padding(self._normalize(chroma_stft), 12, self.feature_size)
             
+            # Spectral bandwidth (1 row)
             spec_bw = librosa.feature.spectral_bandwidth(
                 y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
             )
             spec_bw = self._padding(self._normalize(spec_bw), 1, self.feature_size)
-
-            #Now the padding part
-            channel1 = spec_bw
-            channel1 = np.concatenate((channel1, spec_centroid), axis=0)
-            rows_filled = channel1.shape[0]
-            while rows_filled < 116: # 128 - 12 for chroma
-                channel1 = np.concatenate((channel1, spec_bw), axis=0)
-                rows_filled += 1
-                if rows_filled < 116:
-                    channel1 = np.concatenate((channel1, spec_centroid), axis=0)
-                    rows_filled += 1
-
-            # Add chroma at the end
-            channel1 = np.concatenate((channel1, chroma_stft), axis=0)
             
-            result = np.stack([channel1, mel_spec, MFCCs], axis=2)
+            # Combine features for third channel
+            channel3 = np.zeros((64, self.feature_size))
             
+            # First add spectral bandwidth and centroid
+            channel3[0:1] = spec_bw
+            channel3[1:2] = spec_centroid
+            
+            # Add chroma (12 rows)
+            channel3[2:14] = chroma_stft
+            
+            # Fill remaining rows by repeating spec_bw and spec_centroid
+            current_row = 14
+            while current_row < 64:
+                if current_row % 2 == 0 and current_row + 1 <= 64:
+                    channel3[current_row:current_row+1] = spec_bw
+                elif current_row + 1 <= 64:
+                    channel3[current_row:current_row+1] = spec_centroid
+                current_row += 1
+            
+            # Make sure all features have the same shape (64, feature_size)
+            assert channel3.shape == (64, self.feature_size)
+            assert mel_spec.shape == (64, self.feature_size)
+            assert MFCCs.shape == (64, self.feature_size)
+            
+            # Stack the features
+            result = np.stack([channel3, mel_spec, MFCCs], axis=2)
             return result
-
+            
         except Exception as e:
             print(f"Error in generating features for {audio_path}: {e}")
             import traceback
             traceback.print_exc()
-            return np.zeros((128, self.feature_size, 3))
+            return np.zeros((64, self.feature_size, 3))
