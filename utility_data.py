@@ -9,7 +9,6 @@ import librosa
 import librosa.display
 import numpy as np
 
-
 class AudioDataset(torch.utils.data.Dataset):
     def __init__(self, datafolder:str="data", metadata_csv: str="train.csv", audio_dir: str="train_audio",
                  transform=None, metadata: bool=False, extract_features=False, audio_params: dict=None):
@@ -55,7 +54,12 @@ class AudioDataset(torch.utils.data.Dataset):
         row = self.data.iloc[idx]
 
         # construct path to audio file
-        audio_path = os.path.join(self.audio_dir, row["filename"])
+        audio_path = os.path.join(self.audio_dir, row["filename"])  # Correct path joining
+        try:
+            waveform, _ = torchaudio.load(audio_path)
+        except:
+            print(f"Error loading {audio_path}")
+            return torch.zeros(1, 16000), -1 # dummy data if missing file
 
         label = self.class_to_idx[row["primary_label"]] if "primary_label" in row else -1
 
