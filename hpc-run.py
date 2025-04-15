@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
 
+print("Imported all")
 # %% [markdown]
 # ## Prepare Data
 
@@ -22,6 +23,7 @@ dataset = AudioDataset(
     audio_params=audio_params
 )
 
+print("Initialized objects")
 # %% [markdown]
 # ## Build a Model
 
@@ -84,10 +86,12 @@ class MelCNN(pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
+print("Defined model")
 # %% [markdown]
 # ## Training
 
 # %%
+print("Starting train")
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
 
@@ -107,7 +111,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
 trainer = pl.Trainer(max_epochs=20, callbacks=[checkpoint_callback])
 trainer.fit(model, train_loader, val_loader)
 
-
+print("Finished training")
 # %% [markdown]
 # # Evaluation
 # 
@@ -122,12 +126,6 @@ trainer.fit(model, train_loader, val_loader)
 # Version 1. Increased to 3 input channels. Fed in audio feature data (mels, mfccs, chromas, spectralbw) 
 # 
 # `Performance: Still poor + overfitting`
-
-# %%
-plot_training_log('lightning_logs/version_0/metrics.csv')
-
-# %%
-plot_training_log('lightning_logs/version_1/metrics.csv')
 
 # %% [markdown]
 # Very clear signs of overfitting. Why? Val loss decreases but then increases after 6000 steps.
