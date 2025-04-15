@@ -1,4 +1,6 @@
 # %%
+print("Importing")
+
 from utility_data import *
 
 import torch
@@ -7,23 +9,25 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
 
-print("Imported all")
+print("Done importing")
+
 # %% [markdown]
 # ## Prepare Data
 
 # %%
 # maybe go higher (start at 44.1 kHz, go higher 48-96 kHz if needed)
-audio_params = {'sample_rate': 44000, 'n_fft': 512, 'hop_length': 256, 'n_mfcc': 128, 'n_mels': 128, 'feature_size': 512} # 316?
+audio_params = {'sample_rate': 44000, 'n_fft': 1024, 'hop_length': 256, 'n_mfcc': 64, 'n_mels': 64, 'feature_size': 1024} # 316?
 
 dataset = AudioDataset(
     datafolder="data",
     metadata_csv="train.csv",
-    audio_dir="train_raw5",
+    audio_dir="train_audio",
     extract_features=True,
     audio_params=audio_params
 )
 
-print("Initialized objects")
+print("Initialised objects")
+
 # %% [markdown]
 # ## Build a Model
 
@@ -82,20 +86,24 @@ class MelCNN(pl.LightningModule):
         self.log("val_acc", acc, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=0)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 print("Defined model")
+
 # %% [markdown]
 # ## Training
 
 # %%
-print("Starting train")
+print("Composing train data")
+
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
 
 train_set, val_set = random_split(dataset, [train_size, val_size])
+
+print("Loading Data and training model")
 
 train_loader = DataLoader(train_set, batch_size=32, shuffle=True, num_workers=7)
 val_loader = DataLoader(val_set, batch_size=32, num_workers=7)
@@ -108,10 +116,11 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
     save_top_k=3,
     filename='{epoch}-{val_loss:.2f}'
 )
-trainer = pl.Trainer(max_epochs=20, callbacks=[checkpoint_callback])
+trainer = pl.Trainer(max_epochs=10, callbacks=[checkpoint_callback])
 trainer.fit(model, train_loader, val_loader)
 
 print("Finished training")
+
 # %% [markdown]
 # # Evaluation
 # 
@@ -126,6 +135,12 @@ print("Finished training")
 # Version 1. Increased to 3 input channels. Fed in audio feature data (mels, mfccs, chromas, spectralbw) 
 # 
 # `Performance: Still poor + overfitting`
+
+# %%
+plot_training_log('lightning_logs/version_0/metrics.csv')
+
+# %%
+plot_training_log('lightning_logs/version_1/metrics.csv')
 
 # %% [markdown]
 # Very clear signs of overfitting. Why? Val loss decreases but then increases after 6000 steps.
