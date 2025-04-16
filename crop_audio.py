@@ -43,7 +43,7 @@ if __name__ == "__main__":
     start_time = time.time()
     total = len(ta_metadata)
 
-    with ProcessPoolExecutor as executor:
+    with ProcessPoolExecutor() as executor:
         results = list(executor.map(crop_and_save, range(total)))
 
     end_time = time.time()
