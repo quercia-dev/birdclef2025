@@ -94,11 +94,13 @@ The column 'type' provides a list of qualitative descriptions of the results: th
 
 # Data Preprocessing
 
-To make the analysis more computationally tractable, we experiment with reducing the audio samples using 'MEL' and 'MFCC' coefficients. 
+To make the analysis more computationally tractable, we experiment with reducing the audio samples using Mel and MFCC coefficients.
 
-<!---
-Add explanation of the coefficients
--->
+Mel and MFCC coefficients are both ways to extract relevant features from audio data: the Mel transform is a remapping of audio data to the Mel scale, defined in terms of perceived pitch and modeled after human auditory perception.
+
+On the other hand, MFCC coefficients are a more compressed representation derived from the Mel spectrogram, capturing the overall spectral envelope of the sound by applying a Discrete Cosine Transform (DCT) to the log-Mel energies. This process reduces dimensionality and emphasizes the most informative features for tasks like speech and speaker recognition.
+
+Compared to raw spectrograms, Mel and MFCC representations are more compact and robust to noise and variations. For the purposes of our investigation, we compare performance of models on both inputs, though we see distinctly better results with the MEL transform.
 
 We use spectrograms to display the MEL coefficients: 
 
@@ -114,21 +116,18 @@ For the purpose of training a classifier model, we are interested in segmenting 
 
 - K-means: the simplest conceptually, but it has to be given a number beforehand.
 ![](img/train_spectrogram_12_kmeans.png)
-- Agglomerative clustering: 'ward' rule performed best vs others??
+- Agglomerative clustering: varying the rule, we noticed that 'ward' performs best. We attribute this to minimizing total variance within the cluster, preferring "self-contained" units.
 - DBSCAN: unlimited number of clusters, tweak epsilon and min size
 ![](img/train_spectrogram_12_dbscan.png)
 
-<!---
-Add about enforcing time continuity of the clusters
--->
-Attempts were made to enforce continuity of the clusters in time, to avoid too narrow window sizes.
+Attempts were made to enforce continuity of the clusters in time, to avoid too narrow window sizes: we tried to penalize time continuity by adding the time index to the data as an additional column, and enforcing it as a hardcoded constraints in the experimentation phase. In both cases, we were unable to produce distinct results that could be usable for an initial purpose.
 
 <!---
-Check the following claim
+Check the following claim, add images
 -->
-We also attempted to perform clustering on MFCC coefficients, but we were not able to produce results even comparable to the 
+We also attempted to perform clustering on MFCC coefficients, but we were not able to produce results even comparable to the mel ones: clusters would form around audio without discernible differences, as if the microphone would collect additional details, not relevant to the classification task. These results discouraged us from using MFCC coefficients in our investigation.
 
-We also experiment with K-means, using the primary and secondary labels as a reference for the number of clusters, accounting for an extra cluster given by 'unlabelled'.
+We also experimented with K-means, using the primary and secondary labels as a reference for the number of clusters, accounting for an extra cluster given by 'unlabelled'.
 
 Overall, tweaking the clustering parameters was effective, but the sensitivity to changes in the makes it an ineffective tool for the segmentation of the whole dataset, especially considering the performance on unlabelled data.
 
@@ -146,7 +145,26 @@ As defined by the Cornell Lab of Ornithology, the final result of the study will
 
 In this investigation, we do not include external data sources, nor GPU training in running the model.
 
+On a last note, the final performance of the model is evaluated with 5-second-long samples. With this, we always split samples into 5s intervals and use model architectures that are hardcoded to this size.
+
+## Quirks of the data
+
+- Spliced audio samples: some audio samples are spliced with human voices explaining the microphone setup.
+- Extreme imbalance in available data between classes: lots of classes, 
+- Secondary Labels: information is present in the form of secondary labels.
+- Soundscapes: a large amount of unlabelled audio data is present, which can give more information on the 'shape' of the audio data.
+
+# Architecture Experiments
+
+We account for the presence of secondary labels by adding the secondary samples with an intermediate scheme, depending on parameter m in [0,1]. We start from one-hot encoding as the basis vector e_m, which we scale by m and to which we add the encoding vectors of the secondary labels, with (1-m)/(# secondary labels).
+
+## CNN Architecture
+
+## Transformer Architecture
+
 ## Sound Event Detection
+
+We use an external classifier to one-shot label audio samples, to identify voices in th
 
 # Classification Task 
 
