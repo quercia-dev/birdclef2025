@@ -3,15 +3,23 @@ import pandas as pd
 import torch
 import sys
 import subprocess
-import torch
 import torchaudio
 import librosa
-import librosa.display
 import numpy as np
+from typing import Dict, List, Optional, Tuple, Union
 
 class AudioDataset(torch.utils.data.Dataset):
-    def __init__(self, datafolder:str="data", metadata_csv: str="train.csv", audio_dir: str="train_audio",
-                 transform=None, metadata: bool=False, extract_features=False, audio_params: dict=None):
+    """Dataset class for audio processing with feature extraction capabilities."""
+
+    def __init__(
+        self, 
+        datafolder:str="data",
+        metadata_csv: str="train.csv",
+        audio_dir: str="train_audio",
+        transform=None, 
+        metadata: bool=False, 
+        feature_mode: str='default', 
+        audio_params: Optional[Dict]=None):
         """
         metadata_csv: path to train.csv
         audio_dir: path to train_audio/
@@ -21,72 +29,115 @@ class AudioDataset(torch.utils.data.Dataset):
         feature_size: target width for feature padding
         sample_rate: target sample rate for audio processing
         """
-        datafolder = os.path.join(datafolder, "") 
-        audio_dir = os.path.join(audio_dir, "")  
-        self.audio_dir = os.path.join(datafolder, audio_dir) 
+        self.datafolder = os.path.abspath(datafolder)
+        self.audio_dir = os.path.join(self.datafolder, audio_dir) 
         self.transform = transform
-        self.extract_features = extract_features
-        params = [audio_params[k] for k in ["sample_rate", "n_fft", "hop_length", "n_mfcc", "n_mels", "feature_size"]]
-        self.sample_rate, self.n_fft, self.hop_length, self.n_mfcc, self.n_mels, self.feature_size = params
+        self.feature_mode = feature_mode
 
-        if metadata_csv == "":
+        if audio_params is not None:
+            self.sample_rate = audio_params.get("sample_rate", 32000)
+            self.n_fft = audio_params.get("n_fft", 1024)
+            self.hop_length = audio_params.get("hop_length", 512)
+            self.n_mfcc = audio_params.get("n_mfcc", 64)
+            self.n_mels = audio_params.get("n_mels", 64)
+            self.feature_size = audio_params.get("feature_size", 512)
+        else:
+            self.sample_rate = 32000
+            self.n_fft = 1024
+            self.hop_length = 512
+            self.n_mfcc = 64
+            self.n_mels = 64
+            self.feature_size = 512
+
+        if not metadata_csv:
             self.data = self._load_audio_data(self.audio_dir)
         else:
-            self.data = pd.read_csv(os.path.join(datafolder, metadata_csv))
+            csv_path = os.path.join(self.datafolder, metadata_csv)
+            self.data = pd.read_csv(csv_path) if os.path.exists(csv_path) else pd.DataFrame()
             
-        if metadata:
-            metadata_df = self.data["filename"].apply(
-                lambda filename: self._get_audio_metadata(os.path.join(self.audio_dir, filename))
-            )
-            # Unpack the dictionary and assign to new columns
-            metadata_df = pd.DataFrame(metadata_df.tolist())
-            self.data = pd.concat([self.data, metadata_df], axis=1)
+        if metadata and not self.data.empty:
+            self._extract_metadata()
 
         # sort by alphabetical order, then map species name to label index
-        self.classes = sorted(self.data["primary_label"].unique())
-        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
+        if "primary_label" in self.data.columns:
+            self.classes = sorted(self.data["primary_label"].unique())
+            self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
+        else:
+            self.classes = []
+            self.class_to_idx = {}
+    
+    def _extract_metadata(self) -> None:
+        """Extract audio metadata and add to dataframe."""
+        metadata_list = []
+        
+        for _, row in self.data.iterrows():
+            audio_path = os.path.join(self.audio_dir, row["filename"])
+            metadata = self._get_audio_metadata(audio_path)
+            metadata_list.append(metadata)
+        
+        # Add metadata to dataframe
+        metadata_df = pd.DataFrame(metadata_list)
+        self.data = pd.concat([self.data, metadata_df], axis=1)
 
     def __len__(self):
         return len(self.data)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         # get metadata row of specified index
         row = self.data.iloc[idx]
+        label = self.class_to_idx.get(row.get("primary_label", ""), -1)
+        audio_path = os.path.join(self.audio_dir, row["filename"])
 
-        # construct path to audio file
-        audio_path = os.path.join(self.audio_dir, row["filename"])  # Correct path joining
+        if self.feature_mode == 'mel':
+            mel_spec, _ = self._extract_mel_spectrogram(audio_path)
+            return torch.tensor(mel_spec, dtype=torch.float32).unsqueeze(0), label
+        elif self.feature_mode == 'rich':
+            return self._get_features(audio_path, label)
+        else:
+            return self._get_waveform(audio_path, label)
+
+    def _extract_mel_spectrogram(self, audio_path: str) -> Tuple[torch.Tensor, int]:
+        """Helper method to extract just the mel spectrogram."""
+        try:
+            y_cut, _ = librosa.load(audio_path, sr=self.sample_rate)
+            
+            mel_spec = librosa.feature.melspectrogram(
+                y=y_cut, sr=self.sample_rate,
+                n_fft=self.n_fft, hop_length=self.hop_length, n_mels=self.n_mels,
+                fmin=40, fmax=15000, power=2.0
+            )
+            
+            mel_spec = librosa.power_to_db(mel_spec, ref=1, top_db=100.0)
+            mel_spec = mel_spec.astype('float32')
+            
+            return mel_spec, True
+        except Exception as e:
+            print(f"Error extracting mel spectrogram: {e}")
+            return np.zeros((128, 1000), dtype=np.float32), False
+
+    def _get_features(self, audio_path: str, label: int) -> Tuple[torch.Tensor, int]:
+        """Extract audio features for CNN."""
+        try:
+            features = self.generate_features(audio_path)
+            features_tensor = torch.tensor(features, dtype=torch.float32)
+            features_tensor = features_tensor.permute(2, 0, 1)  # [channels, height, width]
+            return features_tensor, label
+        except Exception as e:
+            print(f"Error extracting features from {audio_path}: {e}")
+            return torch.zeros(3, 64, self.feature_size), label
+    
+    def _get_waveform(self, audio_path: str, label: int) -> Tuple[torch.Tensor, int]:
+        """Load audio waveform."""
         try:
             waveform, _ = torchaudio.load(audio_path)
-        except:
-            print(f"Error loading {audio_path}")
-            return torch.zeros(1, 16000), -1 # dummy data if missing file
+            if self.transform:
+                waveform = self.transform(waveform)
+            return waveform, label
+        except Exception as e:
+            print(f"Error loading {audio_path}: {e}")
+            return torch.zeros(1, 16000), label
 
-        label = self.class_to_idx[row["primary_label"]] if "primary_label" in row else -1
-
-        if self.extract_features:
-            try:
-                # Extract rich feature set for CNN
-                features = self.generate_features(audio_path)
-                # Convert to torch tensor
-                features_tensor = torch.tensor(features, dtype=torch.float32)
-                features_tensor = features_tensor.permute(2, 0, 1)  # [channels, height, width]
-                return features_tensor, label
-            except Exception as e:
-                print(f"Error extracting features from {audio_path}: {e}")
-                # Return dummy data with appropriate shape
-                return torch.zeros(4, 128, self.feature_size), label
-        else:
-            try:
-                waveform, _ = torchaudio.load(audio_path)
-                # apply any transformation if specified
-                if self.transform:
-                    waveform = self.transform(waveform)
-                return waveform, label
-            except Exception as e:
-                print(f"Error loading {audio_path}: {e}")
-                return torch.zeros(1, 16000), label  # dummy data if missing file
-
-    def open(self, idx):
+    def open(self, idx: int) -> None:
         row = self.data.iloc[idx]
         audio_path = os.path.join(self.audio_dir, row["filename"])
 
@@ -99,7 +150,7 @@ class AudioDataset(torch.utils.data.Dataset):
         else:
             print(f"Unsupported OS: {sys.platform}")
 
-    def locate(self, idx):
+    def locate(self, idx: int) -> None:
         """Open the folder and select the file."""
         row = self.data.iloc[idx]
         audio_path = os.path.join(self.audio_dir, row["filename"])  
@@ -113,15 +164,20 @@ class AudioDataset(torch.utils.data.Dataset):
         else:
             print(f"Unsupported OS: {sys.platform}")
 
-    def get_features(self, idx):
+    def get_features(self, idx: int) -> Tuple[np.ndarray, int]:
         """Extract and return features for a specific sample"""
         row = self.data.iloc[idx]
         audio_path = os.path.join(self.audio_dir, row["filename"])
-        features = self._prepare_features(audio_path)
-        label = self.class_to_idx[row["primary_label"]] if "primary_label" in row else -1
+        features = self.generate_features(audio_path)
+        label = self.class_to_idx.get(row.get("primary_label", ""), -1)
         return features, label
 
-    def _get_audio_metadata(self, audio_path):
+    def _get_path_at_index(self, idx: int) -> str:
+        """Get the full path to the audio file at the given index."""
+        row = self.data.iloc[idx]
+        return os.path.join(self.audio_dir, row["filename"])
+
+    def _get_audio_metadata(self, audio_path: str) -> Dict:
         """Extract metadata from audio file"""
         try:
             waveform, sample_rate = torchaudio.load(audio_path)
@@ -131,17 +187,23 @@ class AudioDataset(torch.utils.data.Dataset):
             print(f"Error loading metadata for {audio_path}: {e}")
             return {"duration": 0, "sample_rate": 0, "channels": 0}
 
-    def _load_audio_data(self, audio_dir):
-        """Create a DataFrame from audio files in a directory"""
+    def _load_audio_data(self, audio_dir: str) -> pd.DataFrame:
+        """Create a DataFrame from audio files in a directory."""
         file_list = []
+        
+        if not os.path.exists(audio_dir):
+            print(f"Warning: Audio directory does not exist: {audio_dir}")
+            return pd.DataFrame({"filename": file_list})
+            
         for root, _, files in os.walk(audio_dir):
             for file in files:
-                if file.endswith('.ogg') or file.endswith('.wav'):
+                if file.lower().endswith(('.ogg', '.wav', '.mp3')):
                     rel_path = os.path.relpath(os.path.join(root, file), audio_dir)
                     file_list.append(rel_path)
+        
         return pd.DataFrame({"filename": file_list})
 
-    def _normalize(self, array):
+    def _normalize(self, array: np.ndarray) -> np.ndarray:
         """Normalize array to [0, 1]"""
         min_val = np.min(array)
         max_val = np.max(array)
@@ -149,7 +211,7 @@ class AudioDataset(torch.utils.data.Dataset):
             return (array - min_val) / (max_val - min_val)
         return np.zeros_like(array)
 
-    def _padding(self, array, xx, yy):
+    def _padding(self, array: np.ndarray, height: int, width: int) -> np.ndarray:
         """
         Pad or trim array to specified dimensions
         :param array: numpy array
@@ -157,86 +219,136 @@ class AudioDataset(torch.utils.data.Dataset):
         :param yy: desired width
         :return: padded or trimmed array
         """
-        h, w = array.shape[0], array.shape[1]
+        h, w = array.shape
         
-        # If array is already equal to or wider than target, just trim to target width
-        if w >= yy:
-            # Center the content when trimming
-            start_idx = (w - yy) // 2
-            return array[:, start_idx:start_idx+yy]
+        # If array is already equal to or wider than target, center-crop
+        if w >= width:
+            start_idx = (w - width) // 2
+            result = array[:, start_idx:start_idx+width]
+            
+            # If height needs adjustment
+            if h != height:
+                # Create new array with target dimensions
+                padded = np.zeros((height, width))
+                # Determine how much to use from original
+                use_h = min(h, height)
+                # Center the content vertically
+                start_h = (height - use_h) // 2
+                # Copy content
+                padded[start_h:start_h+use_h, :] = result[:use_h, :]
+                return padded
+            return result
         
-        # If array is narrower, pad to target width
-        a = max((xx - h) // 2, 0)
-        aa = max(0, xx - a - h)
-        b = max(0, (yy - w) // 2)
-        bb = max(yy - b - w, 0)
+        # If array needs padding
+        padded = np.zeros((height, width))
         
-        # Print debug info to understand the padding dimensions
-        print(f"Padding shape: Original={array.shape}, Target=({xx},{yy}), Pads=({a},{aa},{b},{bb})")
+        # Center the content both vertically and horizontally
+        start_h = (height - h) // 2 if h < height else 0
+        start_w = (width - w) // 2 if w < width else 0
         
-        return np.pad(array, pad_width=((a, aa), (b, bb)), mode='constant')
+        # Copy data, handling both dimensions
+        use_h = min(h, height)
+        use_w = min(w, width)
+        
+        padded[start_h:start_h+use_h, start_w:start_w+use_w] = array[:use_h, :use_w]
+        return padded
 
-    def generate_features(self, audio_path):
-        try: 
-            #max_size=1000 #my max audio file feature width
-
+    def generate_features(self, audio_path: str) -> np.ndarray:
+        try:
+            # Load audio with error checking
+            if not os.path.exists(audio_path):
+                print(f"Audio file not found: {audio_path}")
+                return np.zeros((64, self.feature_size, 3))
+                
             y_cut, _ = librosa.load(audio_path, sr=self.sample_rate)
-
+            
             # Check if audio loaded properly
             if np.all(y_cut == 0) or len(y_cut) == 0:
                 print(f"Warning: Audio file {audio_path} loaded as silence or empty")
-                return np.zeros((128, self.feature_size, 3))
+                return np.zeros((64, self.feature_size, 3))
                 
+            # Compute features in parallel
+            features = {}
             
-            mel_spec = librosa.feature.melspectrogram(
-                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length, n_mels=self.n_mels
-            )
-            mel_spec = self._normalize(np.abs(mel_spec))
-            mel_spec = self._padding(np.abs(mel_spec), 128, self.feature_size)
-
-            MFCCs = librosa.feature.mfcc(
-            y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, 
-            hop_length=self.hop_length, n_mfcc=self.n_mfcc
-            )
-            MFCCs = self._normalize(MFCCs) 
-            MFCCs = self._padding(MFCCs, 128, self.feature_size)
+            # Mel spectrogram
+            features['mel_spec'] = self._compute_mel_spectrogram(y_cut)
             
-
-            spec_centroid = librosa.feature.spectral_centroid(
-            y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
-            )
-            spec_centroid = self._padding(self._normalize(spec_centroid), 1, self.feature_size)
+            # MFCCs
+            features['mfccs'] = self._compute_mfccs(y_cut)
             
-            chroma_stft = librosa.feature.chroma_stft(
-                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
-            )
-            chroma_stft = self._padding(self._normalize(chroma_stft), 12, self.feature_size)
+            # Additional spectral features
+            features['spectral'] = self._compute_spectral_features(y_cut)
             
-            spec_bw = librosa.feature.spectral_bandwidth(
-                y=y_cut, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
-            )
-            spec_bw = self._padding(self._normalize(spec_bw), 1, self.feature_size)
-
-            #Now the padding part
-            channel1 = spec_bw
-            channel1 = np.concatenate((channel1, spec_centroid), axis=0)
-            rows_filled = channel1.shape[0]
-            while rows_filled < 116: # 128 - 12 for chroma
-                channel1 = np.concatenate((channel1, spec_bw), axis=0)
-                rows_filled += 1
-                if rows_filled < 116:
-                    channel1 = np.concatenate((channel1, spec_centroid), axis=0)
-                    rows_filled += 1
-
-            # Add chroma at the end
-            channel1 = np.concatenate((channel1, chroma_stft), axis=0)
-            
-            result = np.stack([channel1, mel_spec, MFCCs], axis=2)
+            # Stack the features
+            result = np.stack([
+                features['spectral'],
+                features['mel_spec'], 
+                features['mfccs']
+            ], axis=2)
             
             return result
-
+            
         except Exception as e:
-            print(f"Error in generating features for {audio_path}: {e}")
+            print(f"Error generating features for {audio_path}: {e}")
             import traceback
             traceback.print_exc()
-            return np.zeros((128, self.feature_size, 3))
+            return np.zeros((64, self.feature_size, 3))
+    def _compute_mel_spectrogram(self, y: np.ndarray) -> np.ndarray:
+        """Compute and normalize mel spectrogram."""
+        mel_spec = librosa.feature.melspectrogram(
+            y=y, sr=self.sample_rate, n_fft=self.n_fft, 
+            hop_length=self.hop_length, n_mels=self.n_mels,
+            fmax=self.sample_rate/2 
+        )
+        mel_spec = self._normalize(np.abs(mel_spec))
+        return self._padding(mel_spec, 64, self.feature_size)
+    
+    def _compute_mfccs(self, y: np.ndarray) -> np.ndarray:
+        """Compute and normalize MFCCs."""
+        mfccs = librosa.feature.mfcc(
+            y=y, sr=self.sample_rate, n_fft=self.n_fft,
+            hop_length=self.hop_length, n_mfcc=self.n_mfcc
+        )
+        mfccs = self._normalize(mfccs)
+        return self._padding(mfccs, 64, self.feature_size)
+    
+    def _compute_spectral_features(self, y: np.ndarray) -> np.ndarray:
+        """Compute and combine various spectral features into a single channel."""
+        # Initialize third channel
+        channel3 = np.zeros((64, self.feature_size))
+        
+        # Spectral centroid (1 row)
+        spec_centroid = librosa.feature.spectral_centroid(
+            y=y, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
+        )
+        spec_centroid = self._padding(self._normalize(spec_centroid), 1, self.feature_size)
+        
+        # Spectral bandwidth (1 row)
+        spec_bw = librosa.feature.spectral_bandwidth(
+            y=y, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
+        )
+        spec_bw = self._padding(self._normalize(spec_bw), 1, self.feature_size)
+        
+        # Chroma STFT (12 rows)
+        chroma_stft = librosa.feature.chroma_stft(
+            y=y, sr=self.sample_rate, n_fft=self.n_fft, hop_length=self.hop_length
+        )
+        chroma_stft = self._padding(self._normalize(chroma_stft), 12, self.feature_size)
+        
+        # Add spectral bandwidth and centroid
+        channel3[0:1] = spec_bw
+        channel3[1:2] = spec_centroid
+        
+        # Add chroma (12 rows)
+        channel3[2:14] = chroma_stft
+        
+        # Fill remaining rows
+        current_row = 14
+        while current_row < 64:
+            if current_row % 2 == 0 and current_row + 1 <= 64:
+                channel3[current_row:current_row+1] = spec_bw
+            elif current_row + 1 <= 64:
+                channel3[current_row:current_row+1] = spec_centroid
+            current_row += 1
+        
+        return channel3

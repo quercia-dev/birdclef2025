@@ -1,5 +1,6 @@
 data/
 lightning_logs/
+tb_logs/
 .venv/
 
 .DS_Store
