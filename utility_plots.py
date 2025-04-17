@@ -1,3 +1,5 @@
+from utility_data import *
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -75,9 +77,15 @@ def plot_value_histograms(data: pd.Series, bins:int=200):
     plt.show()
 
 
-def spectrogram(dataset: Dataset, index: int, clusters: Optional[pd.Series] = None, cmap='tab10'):
+def spectrogram(dataset: AudioDataset, index: int, clusters: Optional[pd.Series] = None, cmap='tab10'):
     waveform, label = dataset[index]
-    spec = waveform.squeeze(0).log2().detach().numpy()  # Shape: (freq_bins, time_frames)
+
+    if waveform.dim() == 1:
+        waveform = waveform.unsqueeze(0)
+
+    # Convert to spectrogram
+    spec = torchaudio.transforms.MelSpectrogram(sample_rate=44100)(waveform)
+    spec = spec.log2().detach().squeeze(0).numpy()  # Shape: [n_mels, time]
     
     fig, ax = plt.subplots(figsize=(10, 4))
     im = ax.imshow(spec, aspect='auto', origin='lower')

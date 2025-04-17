@@ -26,8 +26,11 @@ class AudioDataset(torch.utils.data.Dataset):
         self.audio_dir = os.path.join(datafolder, audio_dir) 
         self.transform = transform
         self.extract_features = extract_features
-        params = [audio_params[k] for k in ["sample_rate", "n_fft", "hop_length", "n_mfcc", "n_mels", "feature_size"]]
-        self.sample_rate, self.n_fft, self.hop_length, self.n_mfcc, self.n_mels, self.feature_size = params
+        if audio_params is not None:
+            params = [audio_params[k] for k in ["sample_rate", "n_fft", "hop_length", "n_mfcc", "n_mels", "feature_size"]]
+            self.sample_rate, self.n_fft, self.hop_length, self.n_mfcc, self.n_mels, self.feature_size = params
+        else:
+            self.sample_rate = 44100
 
         if metadata_csv == "":
             self.data = self._load_audio_data(self.audio_dir)
@@ -79,8 +82,11 @@ class AudioDataset(torch.utils.data.Dataset):
             try:
                 waveform, _ = torchaudio.load(audio_path)
                 # apply any transformation if specified
+                if self.transform is None:
+                    print("No Transform")
                 if self.transform:
                     waveform = self.transform(waveform)
+                    print("Transform Applied")
                 return waveform, label
             except Exception as e:
                 print(f"Error loading {audio_path}: {e}")
