@@ -12,6 +12,14 @@ import time
 
 print("Done importing")
 
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+else:
+    device = torch.device("cpu")
+    print("Using CPU")
+
 # %% [markdown]
 # ## Prepare Data
 
@@ -119,7 +127,13 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
     save_top_k=3,
     filename='{epoch}-{val_loss:.2f}'
 )
-trainer = pl.Trainer(max_epochs=10, callbacks=[checkpoint_callback])
+trainer = pl.Trainer(
+    max_epochs=10, 
+    callbacks=[checkpoint_callback],
+    accelerator='gpu' if torch.cuda.is_available() else 'cpu',
+    devices=2,
+    precision='16-mixed'
+)
 trainer.fit(model, train_loader, val_loader)
 
 print("Finished training")
