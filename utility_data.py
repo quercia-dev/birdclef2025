@@ -6,7 +6,26 @@ import subprocess
 import torchaudio
 import librosa
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple
+
+def get_audio_metadata(file_path: str) -> dict:
+    """Extracts all audio metadata at once (file size, duration, bitrate, etc.)."""
+    from mutagen.oggvorbis import OggVorbis
+    audio = OggVorbis(file_path)
+    
+    file_size = os.path.getsize(file_path)
+    duration = audio.info.length  # in seconds
+    bitrate = audio.info.bitrate // 1000  # in kbps
+    sample_rate = audio.info.sample_rate
+    channels = audio.info.channels
+
+    return {
+        "file_size": file_size,
+        "audio_duration": duration,
+        "audio_bitrate": bitrate,
+        "audio_sample_rate": sample_rate,
+        "audio_channels": channels
+    }
 
 class AudioDataset(torch.utils.data.Dataset):
     """Dataset class for audio processing with feature extraction capabilities."""
@@ -49,36 +68,26 @@ class AudioDataset(torch.utils.data.Dataset):
             self.n_mels = 64
             self.feature_size = 512
 
-        if not metadata_csv:
-            self.data = self._load_audio_data(self.audio_dir)
-        else:
+        if metadata_csv:
             csv_path = os.path.join(self.datafolder, metadata_csv)
             self.data = pd.read_csv(csv_path) if os.path.exists(csv_path) else pd.DataFrame()
-            
+        else:
+            self.data = self._load_audio_data(self.audio_dir)
+
         if metadata and not self.data.empty:
             self._extract_metadata()
 
         # sort by alphabetical order, then map species name to label index
-        if "primary_label" in self.data.columns:
-            self.classes = sorted(self.data["primary_label"].unique())
-            self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
-        else:
-            self.classes = []
-            self.class_to_idx = {}
-    
+        self.classes = sorted(self.data["primary_label"].unique())
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
+        
     def _extract_metadata(self) -> None:
         """Extract audio metadata and add to dataframe."""
-        metadata_list = []
-        
-        for _, row in self.data.iterrows():
-            audio_path = os.path.join(self.audio_dir, row["filename"])
-            metadata = self._get_audio_metadata(audio_path)
-            metadata_list.append(metadata)
-        
-        # Add metadata to dataframe
-        metadata_df = pd.DataFrame(metadata_list)
+        metadata_df = self.data["filename"].apply(lambda filename: get_audio_metadata(os.path.join(self.audio_dir, filename)))
+        # unpack dictionary and assign to new columns
+        metadata_df = pd.DataFrame(metadata_df.tolist())
         self.data = pd.concat([self.data, metadata_df], axis=1)
-
+            
     def __len__(self):
         return len(self.data)
 
@@ -188,20 +197,28 @@ class AudioDataset(torch.utils.data.Dataset):
             return {"duration": 0, "sample_rate": 0, "channels": 0}
 
     def _load_audio_data(self, audio_dir: str) -> pd.DataFrame:
-        """Create a DataFrame from audio files in a directory."""
-        file_list = []
-        
+        """Constructs a DataFrame from the audio files in the audio_dir path.
+
+        - Supports .ogg, .wav, .mp3 files.
+        - Adds 'primary_label' column for .ogg files.
+        """
+        data_rows = []
+
         if not os.path.exists(audio_dir):
             print(f"Warning: Audio directory does not exist: {audio_dir}")
-            return pd.DataFrame({"filename": file_list})
-            
+            return pd.DataFrame(columns=["filename", "primary_label"])
+
         for root, _, files in os.walk(audio_dir):
             for file in files:
                 if file.lower().endswith(('.ogg', '.wav', '.mp3')):
                     rel_path = os.path.relpath(os.path.join(root, file), audio_dir)
-                    file_list.append(rel_path)
-        
-        return pd.DataFrame({"filename": file_list})
+                    primary_label = os.path.splitext(file)[0] if file.lower().endswith('.ogg') else None
+                    data_rows.append({
+                        "filename": rel_path,
+                        "primary_label": primary_label
+                    })
+
+        return pd.DataFrame(data_rows)
 
     def _normalize(self, array: np.ndarray) -> np.ndarray:
         """Normalize array to [0, 1]"""
@@ -293,6 +310,7 @@ class AudioDataset(torch.utils.data.Dataset):
             import traceback
             traceback.print_exc()
             return np.zeros((64, self.feature_size, 3))
+        
     def _compute_mel_spectrogram(self, y: np.ndarray) -> np.ndarray:
         """Compute and normalize mel spectrogram."""
         mel_spec = librosa.feature.melspectrogram(

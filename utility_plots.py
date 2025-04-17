@@ -19,14 +19,14 @@ def count_values_in_lists(df, column_name):
             try:
                 parsed_list = ast.literal_eval(item)
                 all_values.extend(parsed_list)
-            except:
+            except e:
                 continue
     
     return pd.Series(Counter(all_values)).sort_values(ascending=False)
 
 
 def sand_plot(data: pd.DataFrame, title:str="Sand graph", includeX: bool=False):
-    ig, ax = plt.subplots(figsize=(15, 5))
+    _, ax = plt.subplots(figsize=(15, 5))
     data.plot(kind='bar', stacked=True, ax=ax, colormap='tab20')
     ax.set_yscale('log')
 
@@ -79,17 +79,15 @@ def plot_value_histograms(data: pd.Series, bins:int=200):
 
 def spectrogram(dataset: AudioDataset, index: int, clusters: Optional[pd.Series] = None, cmap='tab10'):
     waveform, label = dataset[index]
-
+    
     if waveform.dim() == 1:
         waveform = waveform.unsqueeze(0)
-
-    # Convert to spectrogram
-    spec = torchaudio.transforms.MelSpectrogram(sample_rate=44100)(waveform)
-    spec = spec.log2().detach().squeeze(0).numpy()  # Shape: [n_mels, time]
     
-    fig, ax = plt.subplots(figsize=(10, 4))
+    spec = pd.DataFrame(waveform.log2().detach().squeeze(0).numpy())
+    
+    _, ax = plt.subplots(figsize=(10, 4))
     im = ax.imshow(spec, aspect='auto', origin='lower')
-    plt.title(f"Spectrogram {dataset.classes[label]} (Index: {index})")
+    plt.title(f"Spectrogram {dataset.classes[index]} (Index: {index})")
     plt.colorbar(im, ax=ax)
 
     # Optional: overlay color bands based on clustering
@@ -111,7 +109,6 @@ def spectrogram(dataset: AudioDataset, index: int, clusters: Optional[pd.Series]
 
     plt.tight_layout()
     plt.show()
-
 
 def plot_training_log(csv_path):
     # Read CSV
