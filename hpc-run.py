@@ -116,8 +116,8 @@ print("Loading Data and training model")
 
 start = time.time()
 
-train_loader = DataLoader(train_set, batch_size=32, shuffle=True, num_workers=7)
-val_loader = DataLoader(val_set, batch_size=32, num_workers=7)
+train_loader = DataLoader(train_set, batch_size=32, shuffle=True, num_workers=7, pin_memory=True, persistent_workers=True)
+val_loader = DataLoader(val_set, batch_size=32, num_workers=7, pin_memory=True, persistent_workers=True)
 
 model = MelCNN(num_classes=len(dataset.classes))
 
