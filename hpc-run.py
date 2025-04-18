@@ -130,9 +130,9 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
 trainer = pl.Trainer(
     max_epochs=10, 
     callbacks=[checkpoint_callback],
-    accelerator='gpu' if torch.cuda.is_available() else 'cpu',
-    devices=2,
-    precision='16-mixed'
+    accelerator='cuda' if torch.cuda.is_available() else 'cpu',
+    devices=1,
+    precision='32'
 )
 trainer.fit(model, train_loader, val_loader)
 
