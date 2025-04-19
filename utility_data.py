@@ -7,25 +7,37 @@ import torchaudio
 import librosa
 import numpy as np
 from typing import Dict, Optional, Tuple
+from mutagen.oggvorbis import OggVorbis
 
-def get_audio_metadata(file_path: str) -> dict:
-    """Extracts all audio metadata at once (file size, duration, bitrate, etc.)."""
-    from mutagen.oggvorbis import OggVorbis
-    audio = OggVorbis(file_path)
-    
-    file_size = os.path.getsize(file_path)
-    duration = audio.info.length  # in seconds
-    bitrate = audio.info.bitrate // 1000  # in kbps
-    sample_rate = audio.info.sample_rate
-    channels = audio.info.channels
 
-    return {
-        "file_size": file_size,
-        "audio_duration": duration,
-        "audio_bitrate": bitrate,
-        "audio_sample_rate": sample_rate,
-        "audio_channels": channels
-    }
+def get_audio_metadata(audio_path: str) -> Dict:
+    """Extract metadata from audio file"""
+    file_size = os.path.getsize(audio_path)  # in bytes
+    try:
+        audio = OggVorbis(audio_path)
+
+        # Metadata extraction
+        duration = audio.info.length  # in seconds
+        sample_rate = audio.info.sample_rate
+        channels = audio.info.channels
+        bitrate = audio.info.bitrate // 1000  # in kbps
+
+        return {
+            "duration": duration,
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "bitrate": bitrate,
+            "file_size": file_size
+        }
+    except Exception as e:
+        print(f"Error loading metadata for {audio_path}: {e}")
+        return {
+            "duration": 0,
+            "sample_rate": 0,
+            "channels": 0,
+            "bitrate": 0,
+            "file_size": 0
+        }
 
 class AudioDataset(torch.utils.data.Dataset):
     """Dataset class for audio processing with feature extraction capabilities."""
@@ -185,17 +197,7 @@ class AudioDataset(torch.utils.data.Dataset):
         """Get the full path to the audio file at the given index."""
         row = self.data.iloc[idx]
         return os.path.join(self.audio_dir, row["filename"])
-
-    def _get_audio_metadata(self, audio_path: str) -> Dict:
-        """Extract metadata from audio file"""
-        try:
-            waveform, sample_rate = torchaudio.load(audio_path)
-            duration = waveform.shape[1] / sample_rate
-            return {"duration": duration, "sample_rate": sample_rate, "channels": waveform.shape[0]}
-        except Exception as e:
-            print(f"Error loading metadata for {audio_path}: {e}")
-            return {"duration": 0, "sample_rate": 0, "channels": 0}
-
+        
     def _load_audio_data(self, audio_dir: str) -> pd.DataFrame:
         """Constructs a DataFrame from the audio files in the audio_dir path.
 
