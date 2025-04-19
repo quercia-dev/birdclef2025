@@ -116,6 +116,20 @@ class AudioDataset(torch.utils.data.Dataset):
             return self._get_features(audio_path, label)
         else:
             return self._get_waveform(audio_path, label)
+        
+    def get(self, idx: int):
+        # get metadata row of specified index
+        row = self.data.iloc[idx]
+
+        audio_path = os.path.join(self.audio_dir, row["filename"])
+        try:
+            waveform, _ = torchaudio.load(audio_path)
+        except Exception:
+            print(f"Error loading {audio_path}")
+            return torch.zeros(1, 16000), -1 # dummy data if missing file
+
+        return waveform, self.class_to_idx[row["primary_label"]]
+    
 
     def _extract_mel_spectrogram(self, audio_path: str) -> Tuple[torch.Tensor, int]:
         """Helper method to extract just the mel spectrogram."""

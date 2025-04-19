@@ -7,7 +7,7 @@ from collections import Counter
 import ast
 from torch.utils.data import Dataset
 from typing import Optional
-
+import scipy.ndimage
 
 def count_values_in_lists(df, column_name):
     all_values = []
@@ -19,7 +19,7 @@ def count_values_in_lists(df, column_name):
             try:
                 parsed_list = ast.literal_eval(item)
                 all_values.extend(parsed_list)
-            except e:
+            except Exception:
                 continue
     
     return pd.Series(Counter(all_values)).sort_values(ascending=False)
@@ -77,8 +77,11 @@ def plot_value_histograms(data: pd.Series, bins:int=200):
     plt.show()
 
 
-def spectrogram(dataset: AudioDataset, index: int, clusters: Optional[pd.Series] = None, cmap='tab10'):
-    waveform, label = dataset[index]
+def spectrogram(dataset: AudioDataset, index: int, transform=None, clusters: Optional[pd.Series] = None, cmap='tab10'):
+    waveform, _ = dataset[index]
+    
+    if transform is not None:
+        waveform = transform(waveform)
     
     if waveform.dim() == 1:
         waveform = waveform.unsqueeze(0)
@@ -115,7 +118,7 @@ def plot_training_log(csv_path):
     df = pd.read_csv(csv_path)
 
     # Plot
-    fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    _, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
     # Accuracy
     axs[0].plot(df['step'], df['train_acc'], label='Train Accuracy', marker='o')
