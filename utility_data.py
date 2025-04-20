@@ -8,6 +8,8 @@ import librosa
 import numpy as np
 from typing import Dict, Optional, Tuple
 from mutagen.oggvorbis import OggVorbis
+import math
+import soundfile
 
 
 def get_audio_metadata(audio_path: str) -> Dict:
@@ -39,6 +41,66 @@ def get_audio_metadata(audio_path: str) -> Dict:
             "file_size": 0
         }
 
+
+def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:str, transform=None) -> list:
+    """
+    Load every file indicated by the ta_metadata file, 
+    split into segments, and save each segment as a separate file.
+    The last segment is padded with zeroes if needed.
+    Returns a list of filepaths of exported files
+    """
+    
+    try:
+        input_path = os.path.join(input_folder, filepath)
+        
+        sig, _ = torchaudio.load(input_path, backend='soundfile')
+        total_len = sig.shape[1]
+        num_segments = math.ceil(total_len / segment)
+
+        dir_name = os.path.dirname(filepath)
+        base_name, _ = os.path.basename(filepath).rsplit('.', 1)
+        os.makedirs(os.path.join(output_folder, dir_name), exist_ok=True)
+
+        filenames = []
+        for i in range(num_segments):
+            start = i * segment
+            end = start + segment
+
+            # If this is the last segment
+            if end >= total_len:
+                remaining = total_len - start
+
+                # If the remaining is less than half a segment,
+                # shift window to capture the last `segment` samples
+                if remaining > segment // 2:
+                    start = max(0, total_len - segment)
+                    end = total_len
+
+            segment_data = sig[:, start:end]
+
+            # If needed (very rare), pad short segment to full length
+            if segment_data.shape[1] < segment:
+                pad_amount = segment - segment_data.shape[1]
+                segment_data = torch.cat([segment_data, torch.zeros(1, pad_amount)], dim=1)
+
+            segment_filename = os.path.join(dir_name, f'{base_name}_{i}.pt')
+            segment_path = os.path.join(output_folder, segment_filename)
+            
+            spectrogram = segment_data
+            if transform is not None:
+                spectrogram = transform(segment_data)
+            
+            torch.save(spectrogram, segment_path) 
+
+            filenames += [segment_filename]
+
+        return filenames
+
+    except Exception as e:
+        print(f'Error processing {filepath}: {e}')
+        return []
+
+
 class AudioDataset(torch.utils.data.Dataset):
     """Dataset class for audio processing with feature extraction capabilities."""
 
@@ -49,20 +111,20 @@ class AudioDataset(torch.utils.data.Dataset):
         audio_dir: str="train_audio",
         transform=None, 
         metadata: bool=False, 
-        feature_mode: str='default', 
+        feature_mode: str='mel', 
         audio_params: Optional[Dict]=None):
         """
         metadata_csv: path to train.csv
-        audio_dir: path to train_audio/
+        audio_dir: path to 'train_audio/'
         transform: transform for waveform
         extract_features: whether to exract rich feature set for CNN
         audio_params: parameters for audio features
         feature_size: target width for feature padding
         sample_rate: target sample rate for audio processing
         """
-        self.datafolder = os.path.abspath(datafolder)
+        self.datafolder = os.path.join(".", datafolder, "")
         self.audio_dir = os.path.join(self.datafolder, audio_dir) 
-        self.transform = transform
+                
         self.feature_mode = feature_mode
 
         if audio_params is not None:
@@ -79,6 +141,22 @@ class AudioDataset(torch.utils.data.Dataset):
             self.n_mfcc = 64
             self.n_mels = 64
             self.feature_size = 512
+            
+        if transform is None:
+            mel = torchaudio.transforms.MelSpectrogram(
+                sample_rate=self.sample_rate,
+                n_fft=self.n_fft,
+                hop_length=self.hop_length,
+                n_mels=self.n_mels,
+                f_min=40,
+                f_max=15000,
+                power=2.0,
+            )
+            self.transform = mel
+            
+        # 5 sec is hardcoded. This is because the final 
+        # classification task provides 5 sec audios
+        self.segment = 5*self.sample_rate
 
         if metadata_csv:
             csv_path = os.path.join(self.datafolder, metadata_csv)
@@ -93,15 +171,40 @@ class AudioDataset(torch.utils.data.Dataset):
         self.classes = sorted(self.data["primary_label"].unique())
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         
+
+    def preprocess(self, output: str='train_proc'):
+        """
+        Pre-processes the data using a transform.
+        Saves the new table to the datafolder and
+        the new audio files to the 'datafolder / output'
+        Returns a new AudioDataset file.
+        """
+        
+        if output == 'train':
+            raise FileExistsError("I can't let you overwrite 'train.csv', Hal")
+        
+        output_path = os.path.join(self.datafolder, output)
+        
+        data = self.data.copy()
+        data.loc[:, 'idx'] = data.index
+        # apply crop_and_save to each row and set the filename column as a list value 
+        data.loc[:, 'filename'] = data.apply(lambda row : crop_and_save(self.segment, self.audio_dir, output_path, row['filename'], self.transform), axis=1)
+        # create a new row for each filename
+        data = data.explode('filename', ignore_index=True)
+        data.to_csv(os.path.join(self.datafolder, f'{output}.csv'))
+        
+
     def _extract_metadata(self) -> None:
         """Extract audio metadata and add to dataframe."""
         metadata_df = self.data["filename"].apply(lambda filename: get_audio_metadata(os.path.join(self.audio_dir, filename)))
         # unpack dictionary and assign to new columns
         metadata_df = pd.DataFrame(metadata_df.tolist())
         self.data = pd.concat([self.data, metadata_df], axis=1)
+       
             
     def __len__(self):
         return len(self.data)
+
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         # get metadata row of specified index
@@ -116,6 +219,7 @@ class AudioDataset(torch.utils.data.Dataset):
             return self._get_features(audio_path, label)
         else:
             return self._get_waveform(audio_path, label)
+       
         
     def get(self, idx: int):
         # get metadata row of specified index
@@ -150,6 +254,7 @@ class AudioDataset(torch.utils.data.Dataset):
             print(f"Error extracting mel spectrogram: {e}")
             return np.zeros((128, 1000), dtype=np.float32), False
 
+
     def _get_features(self, audio_path: str, label: int) -> Tuple[torch.Tensor, int]:
         """Extract audio features for CNN."""
         try:
@@ -160,6 +265,7 @@ class AudioDataset(torch.utils.data.Dataset):
         except Exception as e:
             print(f"Error extracting features from {audio_path}: {e}")
             return torch.zeros(3, 64, self.feature_size), label
+  
     
     def _get_waveform(self, audio_path: str, label: int) -> Tuple[torch.Tensor, int]:
         """Load audio waveform."""
@@ -171,6 +277,7 @@ class AudioDataset(torch.utils.data.Dataset):
         except Exception as e:
             print(f"Error loading {audio_path}: {e}")
             return torch.zeros(1, 16000), label
+
 
     def open(self, idx: int) -> None:
         row = self.data.iloc[idx]
@@ -184,6 +291,7 @@ class AudioDataset(torch.utils.data.Dataset):
             subprocess.run(['xdg-open', audio_path])
         else:
             print(f"Unsupported OS: {sys.platform}")
+
 
     def locate(self, idx: int) -> None:
         """Open the folder and select the file."""
@@ -199,6 +307,7 @@ class AudioDataset(torch.utils.data.Dataset):
         else:
             print(f"Unsupported OS: {sys.platform}")
 
+
     def get_features(self, idx: int) -> Tuple[np.ndarray, int]:
         """Extract and return features for a specific sample"""
         row = self.data.iloc[idx]
@@ -207,10 +316,12 @@ class AudioDataset(torch.utils.data.Dataset):
         label = self.class_to_idx.get(row.get("primary_label", ""), -1)
         return features, label
 
+
     def _get_path_at_index(self, idx: int) -> str:
         """Get the full path to the audio file at the given index."""
         row = self.data.iloc[idx]
         return os.path.join(self.audio_dir, row["filename"])
+        
         
     def _load_audio_data(self, audio_dir: str) -> pd.DataFrame:
         """Constructs a DataFrame from the audio files in the audio_dir path.
@@ -236,6 +347,7 @@ class AudioDataset(torch.utils.data.Dataset):
 
         return pd.DataFrame(data_rows)
 
+
     def _normalize(self, array: np.ndarray) -> np.ndarray:
         """Normalize array to [0, 1]"""
         min_val = np.min(array)
@@ -243,6 +355,7 @@ class AudioDataset(torch.utils.data.Dataset):
         if max_val > min_val:
             return (array - min_val) / (max_val - min_val)
         return np.zeros_like(array)
+
 
     def _padding(self, array: np.ndarray, height: int, width: int) -> np.ndarray:
         """
@@ -286,6 +399,7 @@ class AudioDataset(torch.utils.data.Dataset):
         padded[start_h:start_h+use_h, start_w:start_w+use_w] = array[:use_h, :use_w]
         return padded
 
+
     def generate_features(self, audio_path: str) -> np.ndarray:
         try:
             # Load audio with error checking
@@ -327,6 +441,7 @@ class AudioDataset(torch.utils.data.Dataset):
             traceback.print_exc()
             return np.zeros((64, self.feature_size, 3))
         
+        
     def _compute_mel_spectrogram(self, y: np.ndarray) -> np.ndarray:
         """Compute and normalize mel spectrogram."""
         mel_spec = librosa.feature.melspectrogram(
@@ -337,6 +452,7 @@ class AudioDataset(torch.utils.data.Dataset):
         mel_spec = self._normalize(np.abs(mel_spec))
         return self._padding(mel_spec, 64, self.feature_size)
     
+    
     def _compute_mfccs(self, y: np.ndarray) -> np.ndarray:
         """Compute and normalize MFCCs."""
         mfccs = librosa.feature.mfcc(
@@ -345,6 +461,7 @@ class AudioDataset(torch.utils.data.Dataset):
         )
         mfccs = self._normalize(mfccs)
         return self._padding(mfccs, 64, self.feature_size)
+    
     
     def _compute_spectral_features(self, y: np.ndarray) -> np.ndarray:
         """Compute and combine various spectral features into a single channel."""
