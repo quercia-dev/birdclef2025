@@ -8,8 +8,17 @@ import torch.nn as nn
 import torch.nn.functional as F 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
+import time
 
 print("Done importing")
+
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+else:
+    device = torch.device("cpu")
+    print("Using CPU")
 
 # %% [markdown]
 # ## Prepare Data
@@ -86,7 +95,7 @@ class MelCNN(pl.LightningModule):
         self.log("val_acc", acc, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
@@ -105,8 +114,10 @@ train_set, val_set = random_split(dataset, [train_size, val_size])
 
 print("Loading Data and training model")
 
-train_loader = DataLoader(train_set, batch_size=32, shuffle=True, num_workers=7)
-val_loader = DataLoader(val_set, batch_size=32, num_workers=7)
+start = time.time()
+
+train_loader = DataLoader(train_set, batch_size=32, shuffle=True, num_workers=7, pin_memory=True, persistent_workers=True)
+val_loader = DataLoader(val_set, batch_size=32, num_workers=7, pin_memory=True, persistent_workers=True)
 
 model = MelCNN(num_classes=len(dataset.classes))
 
@@ -116,39 +127,14 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
     save_top_k=3,
     filename='{epoch}-{val_loss:.2f}'
 )
-trainer = pl.Trainer(max_epochs=10, callbacks=[checkpoint_callback])
+trainer = pl.Trainer(
+    max_epochs=10, 
+    callbacks=[checkpoint_callback],
+    accelerator='cuda' if torch.cuda.is_available() else 'cpu',
+    devices=1,
+    precision='32'
+)
 trainer.fit(model, train_loader, val_loader)
 
 print("Finished training")
-
-# %% [markdown]
-# # Evaluation
-# 
-# 
-# ## Version Details
-# 
-# Version 0. Baseline, fed in raw spectrogram data. 
-# 
-# `Performance: Abysmal`
-# 
-# 
-# Version 1. Increased to 3 input channels. Fed in audio feature data (mels, mfccs, chromas, spectralbw) 
-# 
-# `Performance: Still poor + overfitting`
-
-# %%
-plot_training_log('lightning_logs/version_0/metrics.csv')
-
-# %%
-plot_training_log('lightning_logs/version_1/metrics.csv')
-
-# %% [markdown]
-# Very clear signs of overfitting. Why? Val loss decreases but then increases after 6000 steps.
-# 
-# 
-# Solution:
-# - introduce early stopping
-# - simplify model
-# - implement data augmentation
-
-
+print(f"Execution time: {time.time() - start:.4f} seconds")
