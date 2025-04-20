@@ -503,3 +503,25 @@ class AudioDataset(torch.utils.data.Dataset):
             current_row += 1
         
         return channel3
+    
+    
+if __name__ == '__main__':
+    audio_params = {
+        'sample_rate': 32000,
+        'n_fft': 1024,
+        'hop_length': 501,
+        'n_mfcc': 128,
+        'n_mels': 128,
+        'feature_size': 2048
+    }
+
+    dataset = AudioDataset(
+        datafolder="data",
+        metadata_csv="train.csv",
+        audio_dir="train_audio",
+        feature_mode='mel',
+        audio_params=audio_params,
+        metadata=True
+    )
+    
+    dataset.preprocess(output='train_proc')
