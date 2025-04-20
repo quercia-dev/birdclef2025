@@ -145,7 +145,7 @@ As defined by the Cornell Lab of Ornithology, the final result of the study will
 
 In this investigation, we do not include external data sources, nor GPU training in running the model.
 
-On a last note, the final performance of the model is evaluated with 5-second-long samples. With this, we always split samples into 5s intervals and use model architectures that are hardcoded to this size.
+On a last note, the final performance of the model is evaluated with 5-second-long samples. With this, we always split samples into **5sec** intervals and use model architectures that are hardcoded to this size.
 
 ## Quirks of the data
 
@@ -154,20 +154,42 @@ On a last note, the final performance of the model is evaluated with 5-second-lo
 - Secondary Labels: information is present in the form of secondary labels.
 - Soundscapes: a large amount of unlabelled audio data is present, which can give more information on the 'shape' of the audio data.
 
+# Data Handling
+
+As the final classification task requires labelling of a 5sec long recording, and recordings vary greatly in duration, we split the labelled data into same-size clips. We pad audios shorter than the threshold with zeroes, and align any leftover audio to the right, as long as there is at least 2.5 sec leftover (eg. if a file is 8 sec long, we take the first and last 5 seconds). 
+
+When training the early models, we noticed that computing the mel spectrograms of each recording was a major bottleneck: a cpu-intensive task that impeded training. As a natural result, we opted to cache the mel transforms as '.pt' tensor files, saving only spectrograms of the clips.
+
+We experimented with data augmentation by employing the vast amounts of unlabelled data, in order to produce more data, especially for underrepresented data classes. We obtain new samples by starting from a labelled recording and interpolating its mel spectrogram with the that of a uniformly samples clip from the unlabelled data; the new label is computed as an interpolation of the labels of the two recordings.
+
+<!---
+Do a variational study of how much data can be augmented before it starts to hurt performance, especially for smaller classes
+-->
+
 # Architecture Experiments
 
-We account for the presence of secondary labels by adding the secondary samples with an intermediate scheme, depending on parameter m in [0,1]. We start from one-hot encoding as the basis vector e_m, which we scale by m and to which we add the encoding vectors of the secondary labels, with (1-m)/(# secondary labels).
+We account for the presence of secondary labels by adding the secondary samples with an intermediate scheme, depending on parameter m in [0,1]. We start from one-hot encoding as the basis vector e_m, which we scale by m and to which we add the encoding vectors of the secondary labels, with (1-m)/(# secondary labels). Naturally, the final classification task involves taking the maximum probability.
+
+<!---
+Which m parameter worked best?
+-->
+
+We also include a 'null' label in the classifier, to account for lower confidence levels and deter 'hallucinations'.
+
+<!---
+One shot classification of clips to filter human / no sound??
+-->
 
 ## CNN Architecture
 
 ## Transformer Architecture
-
-## Sound Event Detection
-
-We use an external classifier to one-shot label audio samples, to identify voices in th
 
 # Classification Task 
 
 # Model Evaluation
 
 # Sources
+
+# Setup guide
+
+In our investigation, we used `anaconda` as our preferred package manager. After installing conda, you can recreate the environment through the _environment.yml_ file with the command `conda env create -f environment.yml`. By activating the environment, you can run python scripts within the environment. Alternatively, the `ipykernel` package, already included in the environment, allows to run jupyter notebooks in the correct environment.
