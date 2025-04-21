@@ -43,7 +43,7 @@ def get_audio_metadata(audio_path: str) -> Dict:
         }
 
 
-def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:str, transform=None) -> list:
+def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:str, transform=None, delete_source:bool=False) -> list:
     """
     Load every file indicated by the ta_metadata file, 
     split into segments, and save each segment as a separate file.
@@ -96,6 +96,9 @@ def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:st
             filenames += [segment_filename]
 
         return filenames
+        
+        if delete_source:
+            os.remove(input_path)
 
     except Exception as e:
         print(f'Error processing {filepath}: {e}')
@@ -195,7 +198,7 @@ class AudioDataset(torch.utils.data.Dataset):
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         
 
-    def preprocess(self, output: str='train_proc'):
+    def preprocess(self, output: str='train_proc', delete_source:bool=False):
         """
         Pre-processes the data using a transform.
         Saves the new table to the datafolder and
@@ -211,7 +214,7 @@ class AudioDataset(torch.utils.data.Dataset):
         data = self.data.copy()
         data.loc[:, 'idx'] = data.index
         # apply crop_and_save to each row and set the filename column as a list value 
-        data.loc[:, 'filename'] = data.apply(lambda row : crop_and_save(self.segment, self.audio_dir, output_path, row['filename'], self.transform), axis=1)
+        data.loc[:, 'filename'] = data.apply(lambda row : crop_and_save(self.segment, self.audio_dir, output_path, row['filename'], self.transform, delete_source), axis=1)
         
         data.to_csv(os.path.join(self.datafolder, f'{output}.csv'), index=False)
         
