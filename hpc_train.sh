@@ -18,4 +18,4 @@ eval "$(conda shell.bash hook)"
 
 conda activate birdclef
 
-python hpc-run.py
+python hpc_run.py

@@ -18,4 +18,4 @@ eval "$(conda shell.bash hook)"
 
 conda activate birdclef
 
-python utility-data.py
+python utility_data.py
