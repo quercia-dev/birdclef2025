@@ -1,8 +1,6 @@
-# %%
 from utility_data import *
 from utility_plots import *
 
-# %%
 import torch
 import torch.nn as nn 
 import torch.nn.functional as F 
@@ -12,36 +10,20 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning import Trainer
 import time
 
-print("Imported libraries")
 
-# %%
-print(f"CUDA available: {torch.cuda.is_available()}")
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-    print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-else:
-    device = torch.device("cpu")
-    print("Using CPU")
+def check_cuda():
+    """
+    Checks if CUDA (GPU support) is available and prints the device being used.
+    """
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device("cpu")
+        print("Using CPU")
 
-# %% [markdown]
-# ## Prepare Data
 
-# %%
-dataset = AudioDataset(
-    datafolder="data",
-    metadata_csv="train_proc.csv",
-    audio_dir="train_proc",
-    feature_mode=''
-)
-
-print(dataset[0][0].size())
-
-print("Initialised Dataset")
-
-# %% [markdown]
-# ## Build a Model
-
-# %%
 class MelCNN(pl.LightningModule):
     def __init__(self, num_classes: int, learning_rate: float = 1e-3):
         super().__init__()
@@ -106,44 +88,68 @@ class MelCNN(pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
     
-print("Defined Model")
 
-# %% [markdown]
-# ## Training
+def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=7):
+    """
+    Splits the dataset into training and validation sets and returns their DataLoaders.
 
-# %%
-train_size = int(0.8 * len(dataset))
-val_size = len(dataset) - train_size
-train_set, val_set = random_split(dataset, [train_size, val_size])
+    Args:
+        dataset (Dataset): The full dataset to split.
+        batch_size (int): Number of samples per batch.
+        val_split (float): Proportion of the dataset to use for validation.
+        num_workers (int): Number of subprocesses to use for data loading.
 
-train_loader = DataLoader(train_set, batch_size=32, shuffle=True, num_workers=7, persistent_workers=True)
-val_loader = DataLoader(val_set, batch_size=32, num_workers=7, persistent_workers=True)
-print("Constructed training data infrastructure")
+    Returns:
+        tuple: (train_loader, val_loader)
+    """
+    train_size = int((1 - val_split) * len(dataset))
+    val_size = len(dataset) - train_size
+    train_set, val_set = random_split(dataset, [train_size, val_size])
 
-# %%
-model = MelCNN(num_classes=len(dataset.classes))
+    train_loader = DataLoader(
+        train_set, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, persistent_workers=True
+    )
+    val_loader = DataLoader(
+        val_set, batch_size=batch_size,
+        num_workers=num_workers, persistent_workers=True
+    )
 
-logger = TensorBoardLogger('tb_logs', name='melcnn')
+    return train_loader, val_loader    
 
-checkpoint_callback = pl.callbacks.ModelCheckpoint(
-    monitor='val_loss',
-    mode='min',
-    save_top_k=3,
-    filename='{epoch}-{val_loss:.2f}'
-)
-trainer = pl.Trainer(
-    max_epochs=10, 
-    callbacks=[checkpoint_callback], 
-    logger=logger, 
-    log_every_n_steps=10)
+if __name__ == '__main__':
+    check_cuda()
+    
+    dataset = AudioDataset(
+        datafolder="data",
+        metadata_csv="train_proc.csv",
+        audio_dir="train_proc",
+        feature_mode=''
+    )
 
-# %%
-print("Beginning training")
+    train_loader, val_loader = create_dataloaders(dataset)
+    print("Constructed training data infrastructure")
 
-start = time.time()
-trainer.fit(model, train_loader, val_loader)
-print(f"Execution time: {time.time() - start:.4f} seconds")
+    model = MelCNN(num_classes=len(dataset.classes))
 
-print("Finished training")
+    logger = TensorBoardLogger('tb_logs', name='melcnn')
 
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        monitor='val_loss',
+        mode='min',
+        save_top_k=3,
+        filename='{epoch}-{val_loss:.2f}'
+    )
+    trainer = pl.Trainer(
+        max_epochs=10, 
+        callbacks=[checkpoint_callback], 
+        logger=logger, 
+        log_every_n_steps=10)
 
+    print("Beginning training")
+
+    start = time.time()
+    trainer.fit(model, train_loader, val_loader)
+    print(f"Execution time: {time.time() - start:.4f} seconds")
+
+    print("Finished training")

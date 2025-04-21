@@ -183,7 +183,7 @@ class AudioDataset(torch.utils.data.Dataset):
             self._extract_metadata()
 
         # sort by alphabetical order, then map species name to label index
-        self.classes = ['null'] +sorted(self.data["primary_label"].unique())
+        self.classes = ['null'] + sorted(self.data["primary_label"].unique())
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         
 
@@ -206,7 +206,7 @@ class AudioDataset(torch.utils.data.Dataset):
         data.loc[:, 'filename'] = data.apply(lambda row : crop_and_save(self.segment, self.audio_dir, output_path, row['filename'], self.transform), axis=1)
         # create a new row for each filename
         data = data.explode('filename', ignore_index=True)
-        data.to_csv(os.path.join(self.datafolder, f'{output}.csv'))
+        data.to_csv(os.path.join(self.datafolder, f'{output}.csv'), index=False)
         
 
     def _extract_metadata(self) -> None:

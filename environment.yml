@@ -1,5 +1,6 @@
 name: birdclef
 channels:
+  - anaconda
   - conda-forge
   - defaults
 dependencies:
@@ -9,6 +10,7 @@ dependencies:
   - audioread=3.0.1=py313habf4b1d_2
   - blas=2.131=openblas
   - blas-devel=3.9.0=31_hbf4f893_openblas
+  - bottleneck=1.4.2=py313h867d5db_0
   - brotli=1.1.0=h00291cd_2
   - brotli-bin=1.1.0=h00291cd_2
   - brotli-python=1.1.0=py313h9ea2907_2
@@ -152,14 +154,15 @@ dependencies:
   - networkx=3.4.2=pyh267e887_2
   - nomkl=1.0=h5ca1d4c_0
   - numba=0.61.0=py313h7d106be_1
+  - numexpr=2.10.2=py313hcd6ff94_0
   - numpy=2.1.3=py313h7ca3f3b_0
   - openblas=0.3.29=openmp_h30af337_0
   - openh264=2.4.1=h73e2aa4_0
   - openjpeg=2.5.3=h7fd6d84_0
-  - openssl=3.4.1=hc426f3f_0
+  - openssl=3.5.0=hc426f3f_0
   - opentelemetry-api=1.31.1=pyhd8ed1ab_0
   - packaging=24.2=pyhd8ed1ab_2
-  - pandas=2.2.3=py313h38cdd20_1
+  - pandas=2.2.3=py313h6d0c2b6_0
   - parso=0.8.4=pyhd8ed1ab_1
   - patsy=1.0.1=pyhd8ed1ab_1
   - pcre2=10.44=h7634a1b_2
