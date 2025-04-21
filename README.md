@@ -193,3 +193,10 @@ One shot classification of clips to filter human / no sound??
 # Setup guide
 
 In our investigation, we used `anaconda` as our preferred package manager. After installing conda, you can recreate the environment through the _environment.yml_ file with the command `conda env create -f environment.yml`. By activating the environment, you can run python scripts within the environment. Alternatively, the `ipykernel` package, already included in the environment, allows to run jupyter notebooks in the correct environment.
+
+HPC (High Performance Computer) shortcuts:
+
+- `sbatch foo.sh`: submit a job
+- `squeue -u <username>`: shows the status of the job on the queue (short)
+- `scontrol show job <jobID>`: shows the extended status of the job as it was running
+- `scancel <jobID>`: stops the job
