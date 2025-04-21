@@ -114,13 +114,12 @@ class AudioDataset(torch.utils.data.Dataset):
         feature_mode: str='mel', 
         audio_params: Optional[Dict]=None):
         """
-        metadata_csv: path to train.csv
+        datafolder: name of the folder containing the data
+        metadata_csv: name of the csv metadata file
         audio_dir: path to 'train_audio/'
-        transform: transform for waveform
-        extract_features: whether to exract rich feature set for CNN
-        audio_params: parameters for audio features
-        feature_size: target width for feature padding
-        sample_rate: target sample rate for audio processing
+        transform: torch audio transform the waveform
+        feature_mode: method of feature extraction when loading the file ('' - raw, 'mel', 'mfcc')
+        audio_params: parameters for audio feature extraction
         """
         self.datafolder = os.path.join(".", datafolder, "")
         self.audio_dir = os.path.join(self.datafolder, audio_dir) 
@@ -143,17 +142,33 @@ class AudioDataset(torch.utils.data.Dataset):
             self.feature_size = 512
             
         if transform is None:
-            mel = torchaudio.transforms.MelSpectrogram(
-                sample_rate=self.sample_rate,
-                n_fft=self.n_fft,
-                hop_length=self.hop_length,
-                n_mels=self.n_mels,
-                f_min=40,
-                f_max=15000,
-                power=2.0,
-            )
-            self.transform = mel
-            
+            if feature_mode == 'mel':
+                mel = torchaudio.transforms.MelSpectrogram(
+                    sample_rate=self.sample_rate,
+                    n_fft=self.n_fft,
+                    hop_length=self.hop_length,
+                    n_mels=self.n_mels,
+                    f_min=40,
+                    f_max=15000,
+                    power=2.0,
+                )
+                self.transform = mel
+
+            elif feature_mode == 'mfcc':
+                mfcc = torchaudio.transforms.MFCC(
+                    sample_rate=self.sample_rate,
+                    n_mfcc=self.n_mfcc,
+                    melkwargs={
+                        'n_fft': self.n_fft,
+                        'hop_length': self.hop_length,
+                        'n_mels': self.n_mels,
+                        'f_min': 40,
+                        'f_max': 15000,
+                        'power': 2.0,
+                    }
+                )
+                self.transform = mfcc
+                            
         # 5 sec is hardcoded. This is because the final 
         # classification task provides 5 sec audios
         self.segment = 5*self.sample_rate
@@ -168,7 +183,7 @@ class AudioDataset(torch.utils.data.Dataset):
             self._extract_metadata()
 
         # sort by alphabetical order, then map species name to label index
-        self.classes = sorted(self.data["primary_label"].unique())
+        self.classes = ['null'] +sorted(self.data["primary_label"].unique())
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         
 
@@ -212,7 +227,9 @@ class AudioDataset(torch.utils.data.Dataset):
         label = self.class_to_idx.get(row.get("primary_label", ""), -1)
         audio_path = os.path.join(self.audio_dir, row["filename"])
 
-        if self.feature_mode == 'mel':
+        if self.feature_mode == '':
+            return torch.load(audio_path, weights_only=True), label
+        elif self.feature_mode == 'mel':
             mel_spec, _ = self._extract_mel_spectrogram(audio_path)
             return torch.tensor(mel_spec, dtype=torch.float32).unsqueeze(0), label
         elif self.feature_mode == 'rich':
@@ -235,24 +252,32 @@ class AudioDataset(torch.utils.data.Dataset):
         return waveform, self.class_to_idx[row["primary_label"]]
     
 
-    def _extract_mel_spectrogram(self, audio_path: str) -> Tuple[torch.Tensor, int]:
-        """Helper method to extract just the mel spectrogram."""
+    def _extract_spectrogram(self, audio_path: str) -> Tuple[torch.Tensor, bool]:
+        """
+        Helper method to extract features using the self.transform (mel or mfcc).
+        """
+        if self.transform is None:
+            raise ValueError("Feature transform is not set. Make sure to initialize 'self.transform' before calling this method.")
+
         try:
-            y_cut, _ = librosa.load(audio_path, sr=self.sample_rate)
+            waveform, _ = torchaudio.load(audio_path)
             
-            mel_spec = librosa.feature.melspectrogram(
-                y=y_cut, sr=self.sample_rate,
-                n_fft=self.n_fft, hop_length=self.hop_length, n_mels=self.n_mels,
-                fmin=40, fmax=15000, power=2.0
-            )
+            # Convert to mono if stereo
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
             
-            mel_spec = librosa.power_to_db(mel_spec, ref=1, top_db=100.0)
-            mel_spec = mel_spec.astype('float32')
-            
-            return mel_spec, True
+            # Resample if needed
+            if self.sample_rate != 32000:
+                resampler = torchaudio.transforms.Resample(orig_freq=_, new_freq=self.sample_rate)
+                waveform = resampler(waveform)
+
+            features = self.transform(waveform)  # Applies mel or mfcc transform
+            return features, True
+
         except Exception as e:
-            print(f"Error extracting mel spectrogram: {e}")
-            return np.zeros((128, 1000), dtype=np.float32), False
+            print(f"Error extracting features from {audio_path}: {e}")
+            dummy_shape = (self.n_mfcc if isinstance(self.transform, torchaudio.transforms.MFCC) else self.n_mels, 1000)
+            return torch.zeros(dummy_shape, dtype=torch.float32), False
 
 
     def _get_features(self, audio_path: str, label: int) -> Tuple[torch.Tensor, int]:
