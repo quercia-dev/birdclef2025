@@ -10,6 +10,7 @@ from typing import Dict, Optional, Tuple
 from mutagen.oggvorbis import OggVorbis
 import math
 import soundfile
+import ast
 
 
 def get_audio_metadata(audio_path: str) -> Dict:
@@ -175,7 +176,14 @@ class AudioDataset(torch.utils.data.Dataset):
 
         if metadata_csv:
             csv_path = os.path.join(self.datafolder, metadata_csv)
-            self.data = pd.read_csv(csv_path) if os.path.exists(csv_path) else pd.DataFrame()
+            if os.path.exists(csv_path):
+                self.data = pd.read_csv(csv_path)
+                self.data['filename'] = self.data['filename'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x)
+                # create a new row for each filename
+                self.data = self.data.explode('filename', ignore_index=True)
+            else:
+                pd.DataFrame()
+            
         else:
             self.data = self._load_audio_data(self.audio_dir)
 
@@ -204,8 +212,7 @@ class AudioDataset(torch.utils.data.Dataset):
         data.loc[:, 'idx'] = data.index
         # apply crop_and_save to each row and set the filename column as a list value 
         data.loc[:, 'filename'] = data.apply(lambda row : crop_and_save(self.segment, self.audio_dir, output_path, row['filename'], self.transform), axis=1)
-        # create a new row for each filename
-        data = data.explode('filename', ignore_index=True)
+        
         data.to_csv(os.path.join(self.datafolder, f'{output}.csv'), index=False)
         
 
