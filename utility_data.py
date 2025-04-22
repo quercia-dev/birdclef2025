@@ -240,7 +240,7 @@ class AudioDataset(torch.utils.data.Dataset):
         return len(self.data)
 
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         # get metadata row of specified index
         row = self.data.iloc[idx]
         label = self.class_to_idx.get(row.get("primary_label", ""), -1)
@@ -252,9 +252,9 @@ class AudioDataset(torch.utils.data.Dataset):
             mel_spec, _ = self._extract_spectrogram(audio_path)
             return mel_spec.clone().detach(), label
         elif self.feature_mode == 'rich':
-            return self._get_features(audio_path, label)
+            return self._get_features(audio_path), label
         else:
-            return self._get_waveform(audio_path, label)
+            return self._get_waveform(audio_path), label
        
         
     def get(self, idx: int):
@@ -299,28 +299,28 @@ class AudioDataset(torch.utils.data.Dataset):
             return torch.zeros(dummy_shape, dtype=torch.float32), False
 
 
-    def _get_features(self, audio_path: str, label: int) -> Tuple[torch.Tensor, int]:
+    def _get_features(self, audio_path: str) -> torch.Tensor:
         """Extract audio features for CNN."""
         try:
             features = self.generate_features(audio_path)
             features_tensor = torch.from_numpy(features).clone().detach()
             features_tensor = features_tensor.permute(2, 0, 1)  # [channels, height, width]
-            return features_tensor, label
+            return features_tensor
         except Exception as e:
             print(f"Error extracting features from {audio_path}: {e}")
-            return torch.zeros(3, 64, self.feature_size), label
+            return torch.zeros(3, 64, self.feature_size)
   
     
-    def _get_waveform(self, audio_path: str, label: int) -> Tuple[torch.Tensor, int]:
+    def _get_waveform(self, audio_path: str) -> torch.Tensor:
         """Load audio waveform."""
         try:
             waveform, _ = torchaudio.load(audio_path)
             if self.transform:
                 waveform = self.transform(waveform)
-            return waveform, label
+            return waveform
         except Exception as e:
             print(f"Error loading {audio_path}: {e}")
-            return torch.zeros(1, 16000), label
+            return torch.zeros(1, 16000)
 
 
     def open(self, idx: int) -> None:
