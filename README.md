@@ -202,5 +202,5 @@ HPC (High Performance Computer) shortcuts:
 - `scancel <jobID>`: stops the job
 
 ```
-scp -r hpc:PRJ/birdclef2025/output ./data/output 
+scp -rT hpc:PRJ/birdclef2025/output ./data/output 
 ```

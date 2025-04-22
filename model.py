@@ -58,7 +58,8 @@ class MelCNN(pl.LightningModule):
             nn.Dropout(0.2),
             nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(32, num_classes)
+            nn.Linear(32, num_classes),
+            nn.Softmax(dim=1)
         )
 
     def forward(self, x):
@@ -68,18 +69,22 @@ class MelCNN(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        logits = self(x)
-        loss = F.cross_entropy(logits, y)
-        acc = (logits.argmax(dim=1) == y).float().mean()
+        
+        probabilities = self(x)
+        loss = F.mse_loss(probabilities, y)
+        acc = (probabilities.argmax(dim=1) == y.argmax(dim=1)).float().mean()
+        
         self.log("train_loss", loss, on_step=False, on_epoch=True)
         self.log("train_acc", acc, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        logits = self(x)
-        loss = F.cross_entropy(logits, y)
-        acc = (logits.argmax(dim=1) == y).float().mean()
+        
+        probabilities = self(x)
+        loss = F.mse_loss(probabilities, y)
+        acc = (probabilities.argmax(dim=1) == y.argmax(dim=1)).float().mean()
+        
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", acc, prog_bar=True)
 

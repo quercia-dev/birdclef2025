@@ -8,6 +8,7 @@ import librosa
 import numpy as np
 from typing import Dict, Optional, Tuple
 from mutagen.oggvorbis import OggVorbis
+from concurrent.futures import ThreadPoolExecutor
 import math
 import soundfile
 import ast
@@ -113,6 +114,13 @@ def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:st
 
 class AudioDataset(torch.utils.data.Dataset):
     """Dataset class for audio processing with feature extraction capabilities."""
+    
+    def _process_row(self, index_row_tuple):
+        """
+        Wrapper for `calculate_label_tensor`, making it iterable
+        """
+        idx, row = index_row_tuple
+        return idx, self.calculate_label_tensor(row)
 
     def __init__(
         self, 
@@ -122,6 +130,7 @@ class AudioDataset(torch.utils.data.Dataset):
         transform=None, 
         metadata: bool=False, 
         feature_mode: str='mel', 
+        m:int=0.5,
         audio_params: Optional[Dict]=None):
         """
         datafolder: name of the folder containing the data
@@ -129,6 +138,7 @@ class AudioDataset(torch.utils.data.Dataset):
         audio_dir: path to 'train_audio/'
         transform: torch audio transform the waveform. 
             If unspecified, the feature_mode and audio_params are used to construct one.
+        m: probability weight to give the primary label 
         feature_mode: method of feature extraction when loading the file ('' - raw, 'mel', 'mfcc')
         audio_params: parameters for audio feature extraction
         """
@@ -190,7 +200,11 @@ class AudioDataset(torch.utils.data.Dataset):
             csv_path = os.path.join(self.datafolder, metadata_csv)
             if os.path.exists(csv_path):
                 self.data = pd.read_csv(csv_path)
-                self.data['filename'] = self.data['filename'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x)
+
+                # parses to list the columns                
+                for col in ['type', 'secondary_labels', 'filename']:
+                    self.data[col] = self.data[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x)
+
                 # create a new row for each filename
                 self.data = self.data.explode('filename', ignore_index=True)
             else:
@@ -206,7 +220,38 @@ class AudioDataset(torch.utils.data.Dataset):
         self.classes = ['null'] + sorted(self.data["primary_label"].unique())
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         
+        # sets the primary label probability weight
+        if m < 0 or m > 1:
+            m = 0.5
+        self.m = m
+        
+        if ('primary_label' in self.data.columns) and ('secondary_labels' in self.data.columns):
+            with ThreadPoolExecutor() as executor:
+                results = executor.map(self._process_row, self.data.iterrows())
+                self.labels = dict(results)
+                
+                        
+    def calculate_label_tensor(self, row: pd.Series) -> torch.Tensor:
+        """
+        Generates a probabilistic label tensor from a row with primary and secondary labels.  
+        Primary gets weight `m`; secondary labels share the remaining `(1 - m)` mass.  
+        Returns a tensor of shape [num_classes] with class probabilities.
+        """
+        label_tensor = torch.zeros(len(self.class_to_idx))
 
+        primary_label = row['primary_label']
+        primary_idx = self.class_to_idx.get(primary_label, 0)
+        label_tensor[primary_idx] = self.m
+
+        secondary_labels = row.get('secondary_labels', [])
+        if secondary_labels:
+            remaining_prob = (1 - self.m) / len(secondary_labels)
+            for sec_label in secondary_labels:
+                sec_idx = self.class_to_idx.get(sec_label, 0)
+                label_tensor[sec_idx] += remaining_prob
+
+        return label_tensor
+        
     def preprocess(self, output: str='train_proc', delete_source:bool=False):
         """
         Pre-processes the data using a transform.
@@ -243,7 +288,7 @@ class AudioDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         # get metadata row of specified index
         row = self.data.iloc[idx]
-        label = self.class_to_idx.get(row.get("primary_label", ""), -1)
+        label = self.labels[idx]
         audio_path = os.path.join(self.audio_dir, row["filename"])
 
         if self.feature_mode == '':
@@ -357,7 +402,7 @@ class AudioDataset(torch.utils.data.Dataset):
         row = self.data.iloc[idx]
         audio_path = os.path.join(self.audio_dir, row["filename"])
         features = self.generate_features(audio_path)
-        label = self.class_to_idx.get(row.get("primary_label", ""), -1)
+        label = self.labels[idx]
         return features, label
 
 
