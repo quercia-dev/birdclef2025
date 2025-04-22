@@ -200,3 +200,7 @@ HPC (High Performance Computer) shortcuts:
 - `squeue -u <username>`: shows the status of the job on the queue (short)
 - `scontrol show job <jobID>`: shows the extended status of the job as it was running
 - `scancel <jobID>`: stops the job
+
+```
+scp -r hpc:PRJ/birdclef2025/output ./data/output 
+```

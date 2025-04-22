@@ -3,8 +3,8 @@
 #SBATCH --account=3189081
 #SBATCH --partition=ai
 #SBATCH --mem=8G
-#SBATCH --cpus-per-task=4
-#SBATCH --gpus=0
+#SBATCH --cpus-per-task=1
+#SBATCH --gpus=1
 #SBATCH --output=output/%x_%j.out # %x gives job name and %j gives job id
 #SBATCH --error=output/%x_%j.err
 

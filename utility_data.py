@@ -101,10 +101,10 @@ def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:st
             
             filenames += [segment_filename]
 
-        return filenames
-        
         if delete_source:
             os.remove(input_path)
+        
+        return filenames
 
     except Exception as e:
         print(f'Error processing {filepath}: {e}')

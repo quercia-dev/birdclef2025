@@ -124,7 +124,7 @@ if __name__ == '__main__':
         datafolder="data",
         metadata_csv="train_proc.csv",
         audio_dir="train_proc",
-        feature_mode=''
+        feature_mode='mel'
     )
 
     train_loader, val_loader = create_dataloaders(dataset)
