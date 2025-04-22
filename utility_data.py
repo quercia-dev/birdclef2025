@@ -54,7 +54,7 @@ def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:st
     try:
         input_path = os.path.join(input_folder, filepath)
         
-        sig, _ = torchaudio.load(input_path, backend='soundfile')
+        sig, sample_rate = torchaudio.load(input_path)
         total_len = sig.shape[1]
         num_segments = math.ceil(total_len / segment)
 
@@ -84,15 +84,21 @@ def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:st
                 pad_amount = segment - segment_data.shape[1]
                 segment_data = torch.cat([segment_data, torch.zeros(1, pad_amount)], dim=1)
 
-            segment_filename = os.path.join(dir_name, f'{base_name}_{i}.pt')
-            segment_path = os.path.join(output_folder, segment_filename)
+            isOGG = transform is None
             
-            spectrogram = segment_data
-            if transform is not None:
-                spectrogram = transform(segment_data)
+            if isOGG:
+                extension = 'ogg'            
+                segment_filename = os.path.join(dir_name, f'{base_name}_{i}.{extension}')
+                segment_path = os.path.join(output_folder, segment_filename)                
+                torchaudio.save(segment_path, segment_data, sample_rate)
+                
+            else:
+                extension = 'pt'
+                segment_filename = os.path.join(dir_name, f'{base_name}_{i}.{extension}')
+                segment_path = os.path.join(output_folder, segment_filename)            
+                segment_data = transform(segment_data)
+                torch.save(segment_data, segment_path)
             
-            torch.save(spectrogram, segment_path) 
-
             filenames += [segment_filename]
 
         return filenames
@@ -121,7 +127,8 @@ class AudioDataset(torch.utils.data.Dataset):
         datafolder: name of the folder containing the data
         metadata_csv: name of the csv metadata file
         audio_dir: path to 'train_audio/'
-        transform: torch audio transform the waveform
+        transform: torch audio transform the waveform. 
+            If unspecified, the feature_mode and audio_params are used to construct one.
         feature_mode: method of feature extraction when loading the file ('' - raw, 'mel', 'mfcc')
         audio_params: parameters for audio feature extraction
         """
@@ -144,6 +151,8 @@ class AudioDataset(torch.utils.data.Dataset):
             self.n_mfcc = 64
             self.n_mels = 64
             self.feature_size = 512
+            
+        self.transform = transform
             
         if transform is None:
             if feature_mode == 'mel':
@@ -240,8 +249,8 @@ class AudioDataset(torch.utils.data.Dataset):
         if self.feature_mode == '':
             return torch.load(audio_path, weights_only=True), label
         elif self.feature_mode == 'mel':
-            mel_spec, _ = self._extract_mel_spectrogram(audio_path)
-            return torch.tensor(mel_spec, dtype=torch.float32).unsqueeze(0), label
+            mel_spec, _ = self._extract_spectrogram(audio_path)
+            return mel_spec.clone().detach(), label
         elif self.feature_mode == 'rich':
             return self._get_features(audio_path, label)
         else:
@@ -294,7 +303,7 @@ class AudioDataset(torch.utils.data.Dataset):
         """Extract audio features for CNN."""
         try:
             features = self.generate_features(audio_path)
-            features_tensor = torch.tensor(features, dtype=torch.float32)
+            features_tensor = torch.from_numpy(features).clone().detach()
             features_tensor = features_tensor.permute(2, 0, 1)  # [channels, height, width]
             return features_tensor, label
         except Exception as e:
@@ -437,34 +446,35 @@ class AudioDataset(torch.utils.data.Dataset):
 
     def generate_features(self, audio_path: str) -> np.ndarray:
         try:
-            # Load audio with error checking
             if not os.path.exists(audio_path):
                 print(f"Audio file not found: {audio_path}")
                 return np.zeros((64, self.feature_size, 3))
-                
-            y_cut, _ = librosa.load(audio_path, sr=self.sample_rate)
             
-            # Check if audio loaded properly
+            sig, sr = torchaudio.load(audio_path)  # sig shape: [channels, time]
+            
+            if sig.shape[0] > 1:
+                sig = sig.mean(dim=0, keepdim=True)  # shape: [1, time]
+
+            if sr != self.sample_rate:
+                resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.sample_rate)
+                sig = resampler(sig)
+
+            y_cut = sig.squeeze().numpy()
+
             if np.all(y_cut == 0) or len(y_cut) == 0:
                 print(f"Warning: Audio file {audio_path} loaded as silence or empty")
                 return np.zeros((64, self.feature_size, 3))
-                
-            # Compute features in parallel
-            features = {}
-            
-            # Mel spectrogram
-            features['mel_spec'] = self._compute_mel_spectrogram(y_cut)
-            
-            # MFCCs
-            features['mfccs'] = self._compute_mfccs(y_cut)
-            
-            # Additional spectral features
-            features['spectral'] = self._compute_spectral_features(y_cut)
-            
-            # Stack the features
+
+            features = {
+                'mel_spec': self._compute_mel_spectrogram(y_cut),
+                'mfccs': self._compute_mfccs(y_cut),
+                'spectral': self._compute_spectral_features(y_cut),
+            }
+
+            # Stack them along last axis
             result = np.stack([
                 features['spectral'],
-                features['mel_spec'], 
+                features['mel_spec'],
                 features['mfccs']
             ], axis=2)
             
@@ -474,7 +484,7 @@ class AudioDataset(torch.utils.data.Dataset):
             print(f"Error generating features for {audio_path}: {e}")
             import traceback
             traceback.print_exc()
-            return np.zeros((64, self.feature_size, 3))
+            return np.zeros((64, self.feature_size, 3))        
         
         
     def _compute_mel_spectrogram(self, y: np.ndarray) -> np.ndarray:
@@ -550,13 +560,11 @@ if __name__ == '__main__':
         'feature_size': 2048
     }
 
-    dataset = AudioDataset(
+    AudioDataset(
         datafolder="data",
         metadata_csv="train.csv",
         audio_dir="train_audio",
-        feature_mode='mel',
+        feature_mode='',
         audio_params=audio_params,
         metadata=True
-    )
-    
-    dataset.preprocess(output='train_proc')
+    ).preprocess(output='train_proc')
