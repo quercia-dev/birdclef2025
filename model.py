@@ -6,8 +6,8 @@ import torch.nn as nn
 import torch.nn.functional as F 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
-from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning import Trainer
+from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
+from torchmetrics.classification import Accuracy
 import time
 
 
@@ -28,6 +28,9 @@ class MelCNN(pl.LightningModule):
     def __init__(self, num_classes: int, learning_rate: float = 1e-3):
         super().__init__()
         self.save_hyperparameters()
+        
+        self.val_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
+        self.train_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
 
         # input size: [B, 1, 128, 320]
         self.conv_layers = nn.Sequential(
@@ -71,25 +74,25 @@ class MelCNN(pl.LightningModule):
         x, y = batch
         
         probabilities = self(x)
-        loss = F.mse_loss(probabilities, y)
-        acc = (probabilities.argmax(dim=1) == y.argmax(dim=1)).float().mean()
+        loss = F.cross_entropy(probabilities, y)
+        balanced_acc = self.train_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
-        self.log("train_loss", loss, on_step=False, on_epoch=True)
-        self.log("train_acc", acc, on_step=False, on_epoch=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True)
+        self.log("train_acc_balanced", balanced_acc, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         
         probabilities = self(x)
-        loss = F.mse_loss(probabilities, y)
-        acc = (probabilities.argmax(dim=1) == y.argmax(dim=1)).float().mean()
+        loss = F.cross_entropy(probabilities, y)
+        balanced_acc = self.val_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
-        self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", acc, prog_bar=True)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_acc_balanced", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=0)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=0.2)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
     
@@ -137,16 +140,19 @@ if __name__ == '__main__':
 
     model = MelCNN(num_classes=len(dataset.classes))
 
-    logger = TensorBoardLogger('tb_logs', name='melcnn')
+    # tb_logger = TensorBoardLogger('model/tb_logs', name='melcnn')
+    logger = CSVLogger("model/csv_logs", name="melcnn")
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         monitor='val_loss',
         mode='min',
-        save_top_k=3,
-        filename='{epoch}-{val_loss:.2f}'
+        save_top_k=-1,
+        filename='{epoch}-{val_loss:.2f}',
+        dirpath='./model/checkpoints',
+        every_n_epochs=1
     )
     trainer = pl.Trainer(
-        max_epochs=10, 
+        max_epochs=5, 
         callbacks=[checkpoint_callback], 
         logger=logger, 
         log_every_n_steps=10)
@@ -155,6 +161,11 @@ if __name__ == '__main__':
 
     start = time.time()
     trainer.fit(model, train_loader, val_loader)
-    print(f"Execution time: {time.time() - start:.4f} seconds")
+
+    elapsed_time = time.time() - start
+    hours = elapsed_time // 3600
+    minutes = (elapsed_time % 3600) // 60
+    seconds = elapsed_time % 60
+    print(f"Execution time: {int(hours)} hours, {int(minutes)} minutes, {seconds:.4f} seconds")
 
     print("Finished training")

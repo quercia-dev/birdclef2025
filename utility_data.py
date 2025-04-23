@@ -130,7 +130,7 @@ class AudioDataset(torch.utils.data.Dataset):
         transform=None, 
         metadata: bool=False, 
         feature_mode: str='mel', 
-        m:int=0.5,
+        m:int=0.65,
         audio_params: Optional[Dict]=None):
         """
         datafolder: name of the folder containing the data
@@ -237,7 +237,8 @@ class AudioDataset(torch.utils.data.Dataset):
         Primary gets weight `m`; secondary labels share the remaining `(1 - m)` mass.  
         Returns a tensor of shape [num_classes] with class probabilities.
         """
-        label_tensor = torch.zeros(len(self.class_to_idx))
+        num_classes = len(self.class_to_idx)
+        label_tensor = torch.zeros(num_classes)
 
         primary_label = row['primary_label']
         primary_idx = self.class_to_idx.get(primary_label, 0)
@@ -249,6 +250,10 @@ class AudioDataset(torch.utils.data.Dataset):
             for sec_label in secondary_labels:
                 sec_idx = self.class_to_idx.get(sec_label, 0)
                 label_tensor[sec_idx] += remaining_prob
+        else: # adds the remaining probability mass to the other labels equally
+            remaining_prob = (1 - self.m) / (num_classes - 1)
+            label_tensor += remaining_prob
+            label_tensor[primary_idx] -= remaining_prob  # undo addition at primary index
 
         return label_tensor
         

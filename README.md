@@ -160,25 +160,39 @@ As the final classification task requires labelling of a 5sec long recording, an
 
 When training the early models, we noticed that computing the mel spectrograms of each recording was a major bottleneck: a cpu-intensive task that impeded training. As a natural result, we opted to cache the mel transforms as '.pt' tensor files, saving only spectrograms of the clips.
 
+## Data Augmentation
+
 We experimented with data augmentation by employing the vast amounts of unlabelled data, in order to produce more data, especially for underrepresented data classes. We obtain new samples by starting from a labelled recording and interpolating its mel spectrogram with the that of a uniformly samples clip from the unlabelled data; the new label is computed as an interpolation of the labels of the two recordings.
 
 <!---
 Do a variational study of how much data can be augmented before it starts to hurt performance, especially for smaller classes
 -->
 
-# Architecture Experiments
+## Labelling
 
-We account for the presence of secondary labels by adding the secondary samples with an intermediate scheme, depending on parameter m in [0,1]. We start from one-hot encoding as the basis vector e_m, which we scale by m and to which we add the encoding vectors of the secondary labels, with (1-m)/(# secondary labels). Naturally, the final classification task involves taking the maximum probability.
+We include knowledge of the secondary labels by adding it to the probability of the training set, depending on parameter m in [0,1]. We start from one-hot encoding of the primary label, taken as the basis vector e_m, which we scale by m and to which we add the encoding vectors as the uniform probability of the secondary labels: (1-m)/(# secondary labels) for each possible secondary label. We fix 0.65 empirically.
 
-<!---
-Which m parameter worked best?
--->
+We also include a 'null' label in the classifier, to account for lower confidence levels and deter 'hallucinations'. In data points without secondary labels, the leftover probability mass was placed in the 'null' label, to ensure the probability vector is consistent.
 
-We also include a 'null' label in the classifier, to account for lower confidence levels and deter 'hallucinations'.
+## Validation
+
+The purpose of the model is to correctly classify 5-second audio samples among 206 possible classes. Although the final task only requires a single class prediction per sample, we `relax` the problem by designing the model to output a full probability distribution across all classes. This allows us to evaluate not just the top prediction, but also the confidence and structure of the model’s uncertainty. We track both the deviation from the true probability distribution and the correctness of the top predicted label, which is the one with the highest predicted probability.
+
+The following key metrics are used to evaluate model performance: Focal Loss and Balanced Accuracy. Focal Loss is a modified version of cross-entropy loss that places more focus on hard-to-classify examples. It down-weights the loss assigned to well-classified examples and emphasizes those the model struggles with. This helps improve learning in imbalanced datasets, where some classes are underrepresented.
+
+Loss quantifies how close the predicted probability vector is to the target distribution, usually a one-hot vector for classification tasks. A lower loss indicates that the model’s predicted probabilities are better aligned with the true labels. Accuracy, on the other hand, measures how often the class with the highest predicted probability matches the actual label.
+
+We use both metrics because loss provides a continuous signal that reflects model confidence and can guide training, even when predictions are incorrect. Accuracy, in contrast, is discrete and only measures final decision correctness.
+
+To address class imbalances, since some classes appear far more frequently than others, we resort to _Balanced Accuracy_. This metric computes the average of recall (true positive rate) for each class, ensuring that all classes contribute equally to the final score, regardless of their frequency in the dataset.
 
 <!---
 One shot classification of clips to filter human / no sound??
 -->
+
+## Data Filtering
+
+
 
 ## CNN Architecture
 
