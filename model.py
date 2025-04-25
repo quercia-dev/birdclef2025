@@ -2,6 +2,7 @@ from utility_data import *
 from utility_plots import *
 
 import torch
+from focal_loss import FocalLoss
 import torch.nn as nn 
 import torch.nn.functional as F 
 import pytorch_lightning as pl
@@ -25,9 +26,11 @@ def check_cuda():
 
 
 class MelCNN(pl.LightningModule):
-    def __init__(self, num_classes: int, learning_rate: float = 1e-3):
+    def __init__(self, num_classes: int, gamma:int, alpha:float, learning_rate: float = 1e-3):
         super().__init__()
         self.save_hyperparameters()
+        
+        self.floss = FocalLoss(gamma=gamma, alpha=alpha, task_type='multi-label')
         
         self.val_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
         self.train_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
@@ -74,7 +77,7 @@ class MelCNN(pl.LightningModule):
         x, y = batch
         
         probabilities = self(x)
-        loss = F.cross_entropy(probabilities, y)
+        loss = self.floss(probabilities, y)
         balanced_acc = self.train_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
         self.log("train_loss", loss, on_step=True, on_epoch=True)
@@ -85,7 +88,7 @@ class MelCNN(pl.LightningModule):
         x, y = batch
         
         probabilities = self(x)
-        loss = F.cross_entropy(probabilities, y)
+        loss = self.floss(probabilities, y)
         balanced_acc = self.val_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -134,11 +137,16 @@ if __name__ == '__main__':
         audio_dir="train_proc",
         feature_mode='mel'
     )
+    
+    # use 20% of the total dataset
+    # dataset.data = dataset.data.sample(frac=0.2, random_state=42)
 
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
 
-    model = MelCNN(num_classes=len(dataset.classes))
+    model = MelCNN(num_classes=len(dataset.classes),
+                   gamma=2,
+                   alpha=0.25)
 
     # tb_logger = TensorBoardLogger('model/tb_logs', name='melcnn')
     logger = CSVLogger("model/csv_logs", name="melcnn")
