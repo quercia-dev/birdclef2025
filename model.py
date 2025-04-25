@@ -15,6 +15,8 @@ import time
 def check_cuda():
     """
     Checks if CUDA (GPU support) is available and prints the device being used.
+    Returns:
+        torch.device: The device to use (GPU or CPU)
     """
     print(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
@@ -23,6 +25,7 @@ def check_cuda():
     else:
         device = torch.device("cpu")
         print("Using CPU")
+    return device
 
 
 class MelCNN(pl.LightningModule):

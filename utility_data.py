@@ -111,10 +111,16 @@ def crop_and_save(segment: int, input_folder:str, output_folder:str, filepath:st
         print(f'Error processing {filepath}: {e}')
         return []
 
+DEFAULT_SAMPLE_RATE = 32000
+DEFAULT_N_FFT = 1024
+DEFAULT_HOP_LENGTH = 512
+DEFAULT_N_MFCC = 64
+DEFAULT_N_MELS = 64
+DEFAULT_FEATURE_SIZE = 512
 
 class AudioDataset(torch.utils.data.Dataset):
     """Dataset class for audio processing with feature extraction capabilities."""
-    
+
     def _process_row(self, index_row_tuple):
         """
         Wrapper for `calculate_label_tensor`, making it iterable
@@ -122,6 +128,68 @@ class AudioDataset(torch.utils.data.Dataset):
         idx, row = index_row_tuple
         return idx, self.calculate_label_tensor(row)
 
+    def _get_audio_params(self, audio_params: Optional[Dict] = None) -> Tuple[int, int, int, int, int, int]:
+        params = audio_params or {}
+
+        sample_rate = params.get("sample_rate", DEFAULT_SAMPLE_RATE)
+        n_fft = params.get("n_fft", DEFAULT_N_FFT)
+        hop_length = params.get("hop_length", DEFAULT_HOP_LENGTH)
+        n_mfcc = params.get("n_mfcc", DEFAULT_N_MFCC)
+        n_mels = params.get("n_mels", DEFAULT_N_MELS)
+        feature_size = params.get("feature_size", DEFAULT_FEATURE_SIZE)
+        
+        return sample_rate, n_fft, hop_length, n_mfcc, n_mels, feature_size
+    
+    def _get_audio_transform(self, feature_mode:str):
+        if feature_mode == 'mel':
+                mel = torchaudio.transforms.MelSpectrogram(
+                    sample_rate=self.sample_rate,
+                    n_fft=self.n_fft,
+                    hop_length=self.hop_length,
+                    n_mels=self.n_mels,
+                    f_min=40,
+                    f_max=15000,
+                    power=2.0,
+                )
+                return mel
+
+        elif feature_mode == 'mfcc':
+            mfcc = torchaudio.transforms.MFCC(
+                sample_rate=self.sample_rate,
+                n_mfcc=self.n_mfcc,
+                melkwargs={
+                    'n_fft': self.n_fft,
+                    'hop_length': self.hop_length,
+                    'n_mels': self.n_mels,
+                    'f_min': 40,
+                    'f_max': 15000,
+                    'power': 2.0,
+                }
+            )
+            return mfcc
+        else:
+            return None
+        
+    def _get_audio_data(self, csv_path: str) -> pd.DataFrame:
+        if os.path.exists(csv_path):
+            data = pd.read_csv(csv_path)
+
+            # parses to list the columns                
+            for col in ['type', 'secondary_labels', 'filename']:
+                data[col] = data[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x)
+
+            # create a new row for each filename
+            return data.explode('filename', ignore_index=True)
+        else:
+            return pd.DataFrame()
+        
+    def _get_torch_labels(self) -> Dict:
+        if ('primary_label' in self.data.columns) and ('secondary_labels' in self.data.columns):
+            with ThreadPoolExecutor() as executor:
+                results = executor.map(self._process_row, self.data.iterrows())
+                return dict(results)
+        
+        
     def __init__(
         self, 
         datafolder:str="data",
@@ -147,50 +215,17 @@ class AudioDataset(torch.utils.data.Dataset):
                 
         self.feature_mode = feature_mode
 
-        if audio_params is not None:
-            self.sample_rate = audio_params.get("sample_rate", 32000)
-            self.n_fft = audio_params.get("n_fft", 1024)
-            self.hop_length = audio_params.get("hop_length", 512)
-            self.n_mfcc = audio_params.get("n_mfcc", 64)
-            self.n_mels = audio_params.get("n_mels", 64)
-            self.feature_size = audio_params.get("feature_size", 512)
-        else:
-            self.sample_rate = 32000
-            self.n_fft = 1024
-            self.hop_length = 512
-            self.n_mfcc = 64
-            self.n_mels = 64
-            self.feature_size = 512
+        (self.sample_rate, 
+        self.n_fft, 
+        self.hop_length, 
+        self.n_mfcc, 
+        self.n_mels, 
+        self.feature_size) = self._get_audio_params(audio_params)
             
         self.transform = transform
             
         if transform is None:
-            if feature_mode == 'mel':
-                mel = torchaudio.transforms.MelSpectrogram(
-                    sample_rate=self.sample_rate,
-                    n_fft=self.n_fft,
-                    hop_length=self.hop_length,
-                    n_mels=self.n_mels,
-                    f_min=40,
-                    f_max=15000,
-                    power=2.0,
-                )
-                self.transform = mel
-
-            elif feature_mode == 'mfcc':
-                mfcc = torchaudio.transforms.MFCC(
-                    sample_rate=self.sample_rate,
-                    n_mfcc=self.n_mfcc,
-                    melkwargs={
-                        'n_fft': self.n_fft,
-                        'hop_length': self.hop_length,
-                        'n_mels': self.n_mels,
-                        'f_min': 40,
-                        'f_max': 15000,
-                        'power': 2.0,
-                    }
-                )
-                self.transform = mfcc
+            self.transform = self._get_audio_transform(feature_mode)
                             
         # 5 sec is hardcoded. This is because the final 
         # classification task provides 5 sec audios
@@ -198,18 +233,7 @@ class AudioDataset(torch.utils.data.Dataset):
 
         if metadata_csv:
             csv_path = os.path.join(self.datafolder, metadata_csv)
-            if os.path.exists(csv_path):
-                self.data = pd.read_csv(csv_path)
-
-                # parses to list the columns                
-                for col in ['type', 'secondary_labels', 'filename']:
-                    self.data[col] = self.data[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x)
-
-                # create a new row for each filename
-                self.data = self.data.explode('filename', ignore_index=True)
-            else:
-                pd.DataFrame()
-            
+            self.data = self._get_audio_data(csv_path)
         else:
             self.data = self._load_audio_data(self.audio_dir)
 
@@ -225,10 +249,7 @@ class AudioDataset(torch.utils.data.Dataset):
             m = 0.5
         self.m = m
         
-        if ('primary_label' in self.data.columns) and ('secondary_labels' in self.data.columns):
-            with ThreadPoolExecutor() as executor:
-                results = executor.map(self._process_row, self.data.iterrows())
-                self.labels = dict(results)
+        self.labels = self._get_torch_labels()
                 
                         
     def calculate_label_tensor(self, row: pd.Series) -> torch.Tensor:
