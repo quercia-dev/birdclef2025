@@ -3,28 +3,53 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - _libgcc_mutex=0.1
-  - _openmp_mutex=4.5
-  - bzip2=1.0.8
-  - ca-certificates=2025.1.31
-  - ld_impl_linux-64=2.43
-  - libexpat=2.7.0
-  - libffi=3.4.6
-  - libgcc=14.2.0
-  - libgcc-ng=14.2.0
-  - libgomp=14.2.0
-  - liblzma=5.8.1
-  - libmpdec=4.0.0
-  - libsqlite=3.49.1
-  - libuuid=2.38.1
-  - libzlib=1.3.1
-  - ncurses=6.5
-  - openssl=3.5.0
-  - pip=25.0.1
-  - python=3.13.3
-  - python_abi=3.13
-  - readline=8.2
-  - tk=8.6.13
+  - _libgcc_mutex=0.1=conda_forge
+  - _openmp_mutex=4.5=2_gnu
+  - bzip2=1.0.8=h4bc722e_7
+  - ca-certificates=2025.1.31=hbd8a1cb_1
+  - cffi=1.17.1=py313hfab6e84_0
+  - gettext=0.23.1=h5888daf_0
+  - gettext-tools=0.23.1=h5888daf_0
+  - lame=3.100=h166bdaf_1003
+  - ld_impl_linux-64=2.43=h712a8e2_4
+  - libasprintf=0.23.1=h8e693c7_0
+  - libasprintf-devel=0.23.1=h8e693c7_0
+  - libblas=3.9.0=31_h59b9bed_openblas
+  - libcblas=3.9.0=31_he106b2a_openblas
+  - libexpat=2.7.0=h5888daf_0
+  - libffi=3.4.6=h2dba641_1
+  - libflac=1.4.3=h59595ed_0
+  - libgcc=14.2.0=h767d61c_2
+  - libgcc-ng=14.2.0=h69a702a_2
+  - libgettextpo=0.23.1=h5888daf_0
+  - libgettextpo-devel=0.23.1=h5888daf_0
+  - libgfortran=14.2.0=h69a702a_2
+  - libgfortran5=14.2.0=hf1ad2bd_2
+  - libgomp=14.2.0=h767d61c_2
+  - liblapack=3.9.0=31_h7ac8fdf_openblas
+  - liblzma=5.8.1=hb9d3cd8_0
+  - libmpdec=4.0.0=h4bc722e_0
+  - libogg=1.3.5=h4ab18f5_0
+  - libopenblas=0.3.29=pthreads_h94d23a6_0
+  - libopus=1.5.2=hd0c01bc_0
+  - libsndfile=1.2.2=hc60ed4a_1
+  - libsqlite=3.49.1=hee588c1_2
+  - libstdcxx=14.2.0=h8f9b012_2
+  - libstdcxx-ng=14.2.0=h4852527_2
+  - libuuid=2.38.1=h0b41bf4_0
+  - libvorbis=1.3.7=h9c3ff4c_0
+  - libzlib=1.3.1=hb9d3cd8_2
+  - mpg123=1.32.9=hc50e24c_0
+  - mutagen=1.47.0=pyhd8ed1ab_1
+  - ncurses=6.5=h2d0b736_3
+  - openssl=3.5.0=h7b32b05_0
+  - pip=25.0.1=pyh145f28c_0
+  - pycparser=2.22=pyh29332c3_1
+  - pysoundfile=0.13.1=pyhd8ed1ab_0
+  - python=3.13.3=hf636f53_101_cp313
+  - python_abi=3.13=7_cp313
+  - readline=8.2=h8c095d6_2
+  - tk=8.6.13=noxft_h4845f30_101
   - pip:
       - aiohappyeyeballs==2.6.1
       - aiohttp==3.11.16
@@ -33,7 +58,6 @@ dependencies:
       - audioop-lts==0.2.1
       - audioread==3.0.1
       - certifi==2025.1.31
-      - cffi==1.17.1
       - charset-normalizer==3.4.1
       - contourpy==1.3.1
       - cycler==0.12.1
@@ -58,26 +82,26 @@ dependencies:
       - networkx==3.3
       - numba==0.61.2
       - numpy==2.1.2
-      - nvidia-cublas-cu12==12.4.5.8
-      - nvidia-cuda-cupti-cu12==12.4.127
-      - nvidia-cuda-nvrtc-cu12==12.4.127
-      - nvidia-cuda-runtime-cu12==12.4.127
-      - nvidia-cudnn-cu12==9.1.0.70
-      - nvidia-cufft-cu12==11.2.1.3
-      - nvidia-curand-cu12==10.3.5.147
-      - nvidia-cusolver-cu12==11.6.1.9
-      - nvidia-cusparse-cu12==12.3.1.170
-      - nvidia-cusparselt-cu12==0.6.2
-      - nvidia-nccl-cu12==2.21.5
-      - nvidia-nvjitlink-cu12==12.4.127
-      - nvidia-nvtx-cu12==12.4.127
+      - nvidia-cublas-cu12==12.6.4.1
+      - nvidia-cuda-cupti-cu12==12.6.80
+      - nvidia-cuda-nvrtc-cu12==12.6.77
+      - nvidia-cuda-runtime-cu12==12.6.77
+      - nvidia-cudnn-cu12==9.5.1.17
+      - nvidia-cufft-cu12==11.3.0.4
+      - nvidia-cufile-cu12==1.11.1.6
+      - nvidia-curand-cu12==10.3.7.77
+      - nvidia-cusolver-cu12==11.7.1.2
+      - nvidia-cusparse-cu12==12.5.4.2
+      - nvidia-cusparselt-cu12==0.6.3
+      - nvidia-nccl-cu12==2.26.2
+      - nvidia-nvjitlink-cu12==12.6.85
+      - nvidia-nvtx-cu12==12.6.77
       - packaging==24.2
       - pandas==2.2.3
       - pillow==11.0.0
       - platformdirs==4.3.7
       - pooch==1.8.2
       - propcache==0.3.1
-      - pycparser==2.22
       - pyparsing==3.2.3
       - python-dateutil==2.9.0.post0
       - pytorch-lightning==2.5.1
@@ -88,19 +112,17 @@ dependencies:
       - scipy==1.15.2
       - setuptools==70.2.0
       - six==1.17.0
-      - soundfile==0.13.1
       - soxr==0.5.0.post1
       - standard-aifc==3.13.0
       - standard-chunk==3.13.0
       - standard-sunau==3.13.0
-      - sympy==1.13.1
+      - sympy==1.13.3
       - threadpoolctl==3.6.0
-      - torch==2.6.0+cu124
-      - torchaudio==2.6.0+cu124
+      - torch==2.7.0
+      - torchaudio==2.7.0
       - torchmetrics==1.7.1
-      - torchvision==0.21.0+cu124
       - tqdm==4.67.1
-      - triton==3.2.0
+      - triton==3.3.0
       - typing-extensions==4.12.2
       - tzdata==2025.2
       - urllib3==2.4.0

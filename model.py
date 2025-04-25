@@ -1,8 +1,8 @@
 from utility_data import *
 from utility_plots import *
+from focal_loss import FocalLoss
 
 import torch
-from focal_loss import FocalLoss
 import torch.nn as nn 
 import torch.nn.functional as F 
 import pytorch_lightning as pl
