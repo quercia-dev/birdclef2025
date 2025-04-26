@@ -13,7 +13,8 @@ from torchmetrics.classification import Accuracy
 
 import time
 import argparse
-
+import csv
+import shutil
 
 def check_cuda():
     """
@@ -32,11 +33,9 @@ def check_cuda():
 
 
 class MelCNN(pl.LightningModule):
-    def __init__(self, num_classes: int, gamma:int, alpha:float, learning_rate: float = 1e-3):
+    def __init__(self, num_classes: int, gamma:int, alphas:torch.Tensor, learning_rate: float = 1e-3):
         super().__init__()
         self.save_hyperparameters()
-        
-        self.floss = FocalLoss(gamma=gamma, alpha=alpha, task_type='multi-label')
         
         self.val_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
         self.train_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
@@ -73,6 +72,8 @@ class MelCNN(pl.LightningModule):
             nn.Linear(32, num_classes),
             nn.Softmax(dim=1)
         )
+        
+        self.alphas = alphas
 
     def forward(self, x):
         x = self.conv_layers(x)
@@ -82,8 +83,11 @@ class MelCNN(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         
-        probabilities = self(x)
-        loss = self.floss(probabilities, y)
+        probabilities = self(x)  # logits expected
+        log_probs = F.log_softmax(probabilities, dim=-1)  # [batch_size, num_classes]
+        weighted_log_probs = log_probs * self.alphas  # self.class_weights: [num_classes]
+        loss = -(y * weighted_log_probs).sum(dim=-1).mean()
+
         balanced_acc = self.train_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
         self.log("train_loss", loss, on_step=True, on_epoch=True)
@@ -93,15 +97,18 @@ class MelCNN(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         
-        probabilities = self(x)
-        loss = self.floss(probabilities, y)
+        probabilities = self(x)  # logits expected
+        log_probs = F.log_softmax(probabilities, dim=-1)  # [batch_size, num_classes]
+        weighted_log_probs = log_probs * self.alphas
+        loss = -(y * weighted_log_probs).sum(dim=-1).mean()
+
         balanced_acc = self.val_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val_acc_balanced", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=0.2)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=2)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
     
@@ -135,6 +142,52 @@ def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=7):
     return train_loader, val_loader    
 
 
+def train_model(results_folder:str, args, gamma:float, alphas:list):
+    model_descr = f'{args.model}_g{gamma}'
+
+    if args.model == 'melcnn':
+        model = MelCNN(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas)
+    elif args.model == 'efficient':
+        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas)
+
+    # Select logger
+    if args.log == 'tensor':
+        logger = TensorBoardLogger('model/tb_logs', name=model_descr)
+    elif args.log == 'csv':
+        logger = CSVLogger("model/csv_logs", name=model_descr)
+
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        monitor='val_loss',
+        mode='min',
+        save_top_k=1,
+        filename='{epoch}-{val_loss:.2f}',
+        dirpath=os.path.join(results_folder, f'checkpoints/{model_descr}'),
+        every_n_epochs=1
+    )
+    trainer = pl.Trainer(
+        max_epochs=1, 
+        callbacks=[checkpoint_callback], 
+        logger=logger, 
+        log_every_n_steps=10)
+
+    print("Begin training", model_descr)
+
+    start = time.time()
+    trainer.fit(model, train_loader, val_loader)
+    print_elapsed(time.time()-start, model_descr)
+    
+    best_val_loss = checkpoint_callback.best_model_score.item()
+    best_val_acc = float(trainer.callback_metrics.get("val_acc_balanced", 0.0))
+
+    return best_val_loss, best_val_acc
+
+def print_elapsed(elapsed_time, descr:str = 'Model'):    
+    hours = elapsed_time // 3600
+    minutes = (elapsed_time % 3600) // 60
+    seconds = elapsed_time % 60
+    print(f"{descr}: {int(hours)} hours, {int(minutes)} minutes, {seconds:.4f} seconds")
+    
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Audio classification training script")
     parser.add_argument('--log', choices=['tensor', 'csv'], default='csv',
@@ -159,40 +212,26 @@ if __name__ == '__main__':
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
 
-    if args.model == 'melcnn':
-        model = MelCNN(num_classes=len(dataset.classes), gamma=2, alpha=0.25)
-    elif args.model == 'efficient':
-        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=2, alpha=0.25)
+    results_folder = './model'
+    
+    if os.path.exists(results_folder):
+        shutil.rmtree(results_folder)
+    os.makedirs(results_folder)
+    
+    results_file = os.path.join(results_folder, 'grid_search.csv')
+    with open(results_file, mode='w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['gamma', 'null_alpha', 'best_val_loss', 'best_val_acc'])  # header
 
-    # Select logger
-    if args.log == 'tensor':
-        logger = TensorBoardLogger('model/tb_logs', name=args.model)
-    elif args.log == 'csv':
-        logger = CSVLogger("model/csv_logs", name=args.model)
+    gammas = [0, 0.1, 1, 3]
+    null_alpha = [0, 1, 10, 100] # importance of the null vector in CE loss
+    for alpha in null_alpha:
+        for gamma in gammas:
+            alpha = torch.tensor([alpha], dtype=torch.float32)
+            best_val_loss, best_val_acc = train_model(results_folder, args, gamma, torch.cat([alpha, dataset.alphas], dim=0))
 
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        monitor='val_loss',
-        mode='min',
-        save_top_k=-1,
-        filename='{epoch}-{val_loss:.2f}',
-        dirpath='./model/checkpoints',
-        every_n_epochs=1
-    )
-    trainer = pl.Trainer(
-        max_epochs=5, 
-        callbacks=[checkpoint_callback], 
-        logger=logger, 
-        log_every_n_steps=10)
-
-    print("Beginning training")
-
-    start = time.time()
-    trainer.fit(model, train_loader, val_loader)
-
-    elapsed_time = time.time() - start
-    hours = elapsed_time // 3600
-    minutes = (elapsed_time % 3600) // 60
-    seconds = elapsed_time % 60
-    print(f"Execution time: {int(hours)} hours, {int(minutes)} minutes, {seconds:.4f} seconds")
-
-    print("Finished training")
+            with open(results_file, mode='a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([gamma, alpha, best_val_loss, best_val_acc])
+                
+            print(f"Logged results for gamma={gamma}, null_alpha={alpha}, val_loss={best_val_loss:.4f}, val_acc={best_val_acc:.4f}")

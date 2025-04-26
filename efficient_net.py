@@ -1,17 +1,14 @@
-from focal_loss import FocalLoss
-
 import torch
 import torch.nn as nn 
 import pytorch_lightning as pl
+import torch.nn.functional as F 
 from torchmetrics.classification import Accuracy
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
 class EfficientNetAudio(pl.LightningModule):
-    def __init__(self, num_classes: int, gamma: int, alpha: float, learning_rate: float = 1e-3):
+    def __init__(self, num_classes: int, gamma: int, alphas: torch.Tensor, learning_rate: float = 1e-3):
         super().__init__()
         self.save_hyperparameters()
-        
-        self.floss = FocalLoss(gamma=gamma, alpha=alpha, task_type='multi-label')
         
         self.val_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
         self.train_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
@@ -33,6 +30,8 @@ class EfficientNetAudio(pl.LightningModule):
             nn.Linear(num_ftrs, num_classes),
             nn.Softmax(dim=1)
         )
+        
+        self.alphas = alphas
 
     def forward(self, x):
         return self.efficientnet(x)
@@ -40,8 +39,11 @@ class EfficientNetAudio(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         
-        probabilities = self(x)
-        loss = self.floss(probabilities, y)
+        probabilities = self(x)  # logits expected
+        log_probs = F.log_softmax(probabilities, dim=-1)  # [batch_size, num_classes]
+        weighted_log_probs = log_probs * self.alphas  # self.class_weights: [num_classes]
+        loss = -(y * weighted_log_probs).sum(dim=-1).mean()
+
         balanced_acc = self.train_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
         self.log("train_loss", loss, on_step=True, on_epoch=True)
@@ -51,8 +53,11 @@ class EfficientNetAudio(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         
-        probabilities = self(x)
-        loss = self.floss(probabilities, y)
+        probabilities = self(x)  # logits expected
+        log_probs = F.log_softmax(probabilities, dim=-1)  # [batch_size, num_classes]
+        weighted_log_probs = log_probs * self.alphas
+        loss = -(y * weighted_log_probs).sum(dim=-1).mean()
+
         balanced_acc = self.val_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
         
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)

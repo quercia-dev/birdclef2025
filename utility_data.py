@@ -244,6 +244,10 @@ class AudioDataset(torch.utils.data.Dataset):
         self.classes = ['null'] + sorted(self.data["primary_label"].unique())
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         
+        label_durations = self.data.groupby('primary_label')['duration'].sum()
+        label_proportions = label_durations / self.data['duration'].sum()
+        self.alphas = torch.tensor(1 / label_proportions.values, dtype=torch.float32)
+        
         # sets the primary label probability weight
         if m < 0 or m > 1:
             m = 0.5
