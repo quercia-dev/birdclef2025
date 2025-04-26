@@ -74,6 +74,7 @@ class MelCNN(pl.LightningModule):
         )
         
         self.alphas = alphas
+        self.gamma = gamma
 
     def forward(self, x):
         x = self.conv_layers(x)
@@ -108,12 +109,12 @@ class MelCNN(pl.LightningModule):
         self.log("val_acc_balanced", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=2)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=self.gamma)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
     
 
-def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=7):
+def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=2):
     """
     Splits the dataset into training and validation sets and returns their DataLoaders.
 
@@ -142,7 +143,7 @@ def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=7):
     return train_loader, val_loader    
 
 
-def train_model(results_folder:str, args, gamma:float, alphas:list):
+def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader, val_loader):
     model_descr = f'{args.model}_g{gamma}'
 
     if args.model == 'melcnn':
@@ -197,7 +198,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    check_cuda()
+    device = check_cuda()
     
     dataset = AudioDataset(
         datafolder="data",
@@ -223,15 +224,16 @@ if __name__ == '__main__':
         writer = csv.writer(f)
         writer.writerow(['gamma', 'null_alpha', 'best_val_loss', 'best_val_acc'])  # header
 
-    gammas = [0, 0.1, 1, 3]
+    decay = [0, 0.1, 1, 3]
     null_alpha = [0, 1, 10, 100] # importance of the null vector in CE loss
     for alpha in null_alpha:
-        for gamma in gammas:
-            alpha = torch.tensor([alpha], dtype=torch.float32)
-            best_val_loss, best_val_acc = train_model(results_folder, args, gamma, torch.cat([alpha, dataset.alphas], dim=0))
+        for dec in decay:
+            alpha_t = torch.tensor([alpha], dtype=torch.float32)
+            alphas_augmented = torch.cat([alpha_t, dataset.alphas], dim=0).to(device)
+            best_val_loss, best_val_acc = train_model(results_folder, args, dec, alphas_augmented, train_loader, val_loader)
 
             with open(results_file, mode='a', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow([gamma, alpha, best_val_loss, best_val_acc])
+                writer.writerow([dec, alpha, best_val_loss, best_val_acc])
                 
-            print(f"Logged results for gamma={gamma}, null_alpha={alpha}, val_loss={best_val_loss:.4f}, val_acc={best_val_acc:.4f}")
+            print(f"Logged results for gamma={dec}, null_alpha={alpha}, val_loss={best_val_loss:.4f}, val_acc={best_val_acc:.4f}")
