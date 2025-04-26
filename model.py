@@ -1,6 +1,7 @@
 from utility_data import *
 from utility_plots import *
 from focal_loss import FocalLoss
+from efficient_net import EfficientNetAudio
 
 import torch
 import torch.nn as nn 
@@ -9,7 +10,9 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 from torchmetrics.classification import Accuracy
+
 import time
+import argparse
 
 
 def check_cuda():
@@ -131,7 +134,16 @@ def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=7):
 
     return train_loader, val_loader    
 
+
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Audio classification training script")
+    parser.add_argument('--log', choices=['tensor', 'csv'], default='csv',
+                        help='Choose the logger: "tensor" for TensorBoard, "csv" for CSV logger (default: csv)')
+    parser.add_argument('--model', choices=['melcnn', 'efficient'], default='melcnn',
+                        help='Choose the model architecture: "melcnn" (default) or "efficient"')
+
+    args = parser.parse_args()
+
     check_cuda()
     
     dataset = AudioDataset(
@@ -147,12 +159,16 @@ if __name__ == '__main__':
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
 
-    model = MelCNN(num_classes=len(dataset.classes),
-                   gamma=2,
-                   alpha=0.25)
+    if args.model == 'melcnn':
+        model = MelCNN(num_classes=len(dataset.classes), gamma=2, alpha=0.25)
+    elif args.model == 'efficient':
+        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=2, alpha=0.25)
 
-    # tb_logger = TensorBoardLogger('model/tb_logs', name='melcnn')
-    logger = CSVLogger("model/csv_logs", name="melcnn")
+    # Select logger
+    if args.log == 'tensor':
+        logger = TensorBoardLogger('model/tb_logs', name=args.model)
+    elif args.log == 'csv':
+        logger = CSVLogger("model/csv_logs", name=args.model)
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         monitor='val_loss',
