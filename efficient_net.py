@@ -6,7 +6,7 @@ from torchmetrics.classification import Accuracy
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
 class EfficientNetAudio(pl.LightningModule):
-    def __init__(self, num_classes: int, gamma: int, alphas: torch.Tensor, learning_rate: float = 1e-3):
+    def __init__(self, num_classes: int, gamma: float, alphas: torch.Tensor, learning_rate: float = 1e-3):
         super().__init__()
         self.save_hyperparameters()
         
@@ -32,6 +32,7 @@ class EfficientNetAudio(pl.LightningModule):
         )
         
         self.alphas = alphas
+        self.gamma = gamma
 
     def forward(self, x):
         return self.efficientnet(x)
@@ -73,7 +74,7 @@ class EfficientNetAudio(pl.LightningModule):
         #     param.requires_grad = False
 
         # Option 1: Use regular optimizer
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.learning_rate, weight_decay=0.01)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.learning_rate, weight_decay=self.gamma)
         
         # Option 2: Different learning rates for feature extractor and classifier
         # optimizer = torch.optim.AdamW([

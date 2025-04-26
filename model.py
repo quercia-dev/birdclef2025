@@ -225,7 +225,7 @@ if __name__ == '__main__':
         writer.writerow(['gamma', 'null_alpha', 'best_val_loss', 'best_val_acc'])  # header
 
     decay = [0, 0.1, 1, 3]
-    null_alpha = [0, 1, 10, 100] # importance of the null vector in CE loss
+    null_alpha = [0] # importance of the null vector in CE loss
     for alpha in null_alpha:
         for dec in decay:
             alpha_t = torch.tensor([alpha], dtype=torch.float32)

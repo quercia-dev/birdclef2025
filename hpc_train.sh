@@ -7,6 +7,8 @@
 #SBATCH --gpus=1
 #SBATCH --output=output/%x_%j.out # %x gives job name and %j gives job id
 #SBATCH --error=output/%x_%j.err
+#SBATCH --mail-type=END
+#SBATCH --mail-user=3189081@studbocconi.it
 
 cd ~/PRJ/birdclef2025/
 

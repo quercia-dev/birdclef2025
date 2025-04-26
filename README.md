@@ -147,11 +147,26 @@ In this investigation, we do not include external data sources, nor GPU training
 
 On a last note, the final performance of the model is evaluated with 5-second-long samples. With this, we always split samples into **5sec** intervals and use model architectures that are hardcoded to this size.
 
-## Quirks of the data
+## Quirks and Challenges of the data
 
-- Spliced audio samples: some audio samples are spliced with human voices explaining the microphone setup.
-- Extreme imbalance in available data between classes: lots of classes, 
-- Secondary Labels: information is present in the form of secondary labels.
+- Spliced audio samples: some audio samples are spliced with human voices explaining the microphone setup. Alternatively, some audios contain large proportions of static noise, or simply don't contain much.
+- Extreme imbalance in available data between classes: lots of classes, oftentimes with little data. This has to be tracked during the audio segmentation
+
+| primary_label | Tot    |
+|---------------+--------|
+|         81930 | 44 sec |
+|         67082 | 44 sec |
+|        548639 | 29 sec |
+|         66016 | 26 sec |
+|        523060 | 24 sec |
+|        868458 | 23 sec |
+|         42113 | 22 sec |
+|         42087 | 21 sec |
+|         21116 | 13 sec |
+|       1564122 | 11 sec |
+
+- Very short or very long recordings: 63.83% of recordings are shorter than 30 sec, with the mode being 5 seconds. Recordings shorter than the context window must be augmented.
+- Secondary Labels: information is present in the form of secondary labels, which are notably unreliable.
 - Soundscapes: a large amount of unlabelled audio data is present, which can give more information on the 'shape' of the audio data.
 
 # Data Handling
