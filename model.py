@@ -149,7 +149,7 @@ def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader
     if args.model == 'melcnn':
         model = MelCNN(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas)
     elif args.model == 'efficient':
-        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas, learning_rate=1e-3)
+        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=2.0, alphas=alphas, learning_rate=1e-4)
 
     # Select logger
     if args.log == 'tensor':
@@ -175,7 +175,14 @@ def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader
         max_epochs=20, 
         callbacks=[checkpoint_callback, early_stop_callback], 
         logger=logger, 
-        log_every_n_steps=10)
+        gradient_clip_val=1.0,  # Add gradient clipping
+        gradient_clip_algorithm="norm",
+        precision=16,  # Use mixed precision for better numerical stability
+        log_every_n_steps=10,
+        enable_checkpointing=True,
+        enable_progress_bar=True,
+        detect_anomaly=True,  # Help catch NaN issues
+        )
 
     print("Begin training", model_descr)
 
