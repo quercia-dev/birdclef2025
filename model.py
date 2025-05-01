@@ -149,7 +149,7 @@ def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader
     if args.model == 'melcnn':
         model = MelCNN(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas)
     elif args.model == 'efficient':
-        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas)
+        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas, learning_rate=1e-3)
 
     # Select logger
     if args.log == 'tensor':
@@ -165,9 +165,15 @@ def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader
         dirpath=os.path.join(results_folder, f'checkpoints/{model_descr}'),
         every_n_epochs=1
     )
+    early_stop_callback = pl.callbacks.EarlyStopping(
+        monitor='val_loss',
+        patience=5,
+        verbose=True,
+        mode='min'
+    )
     trainer = pl.Trainer(
-        max_epochs=1, 
-        callbacks=[checkpoint_callback], 
+        max_epochs=20, 
+        callbacks=[checkpoint_callback, early_stop_callback], 
         logger=logger, 
         log_every_n_steps=10)
 
