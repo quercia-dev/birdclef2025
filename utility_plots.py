@@ -139,3 +139,38 @@ def plot_training_log(csv_path):
 
     plt.tight_layout()
     plt.show()
+
+def summarize_secondary_labels(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Summarizes the counts of secondary labels grouped by each primary label.
+
+    Parameters:
+        data (pd.DataFrame): DataFrame containing at least 'primary_label' and 'secondary_labels' columns.
+
+    Returns:
+        pd.DataFrame: Summary DataFrame with secondary label counts per primary label.
+    """
+    primary_labels = data["primary_label"].unique()
+    summary = pd.DataFrame(primary_labels, columns=["primary_label"])
+
+    count_data = []
+    for col in primary_labels:
+        counts_dict = dict(count_values_in_lists(
+            data[data["primary_label"] == col],
+            "secondary_labels"
+        ))
+        count_data.append({"primary_label": col, **counts_dict})
+
+    count_df = pd.DataFrame(count_data)
+    summary = pd.merge(summary, count_df, on="primary_label", how="left", validate="one_to_one")
+
+    summary = summary.fillna(0)
+    summary = summary.rename(columns={'': 'empty'})
+
+    summary['sum_values'] = summary.iloc[:, 1:].sum(axis=1)
+    summary = summary.sort_values(by='sum_values', ascending=False)
+
+    numeric_data = summary.iloc[:, 1:-1]
+    numeric_data.index = summary["primary_label"]
+
+    return summary, numeric_data
