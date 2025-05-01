@@ -50,6 +50,12 @@ class FocalLoss(nn.Module):
 
     def multi_class_focal_loss(self, inputs, targets):
         """ Focal loss for multi-class classification. """
+        # Convert one-hot encoded targets to class indices if needed
+        if targets.dim() > 1 and targets.shape[1] > 1:
+            targets = torch.argmax(targets, dim=1)
+
+        targets = targets.long()
+
         # epsilon for stability
         epsilon = 1e-7
 
@@ -59,7 +65,7 @@ class FocalLoss(nn.Module):
 
         # get probability for correct class for each sample
         batch_size = inputs.size(0)
-        p_t = probs[torch.arange(batch_size), targets]
+        p_t = probs[torch.arange(batch_size, device=targets.device), targets]
         
         # compute focal weight for each sample
         focal_weight = (1 - p_t) ** self.gamma
@@ -72,6 +78,9 @@ class FocalLoss(nn.Module):
 
         # apply alpha if provided (per-class weighting)
         if self.alpha is not None:
+            # Ensure alpha is on the same device as targets
+            if self.alpha.device != targets.device:
+                self.alpha = self.alpha.to(targets.device)
             alpha_t = self.alpha[targets]
             loss = alpha_t * loss
         
