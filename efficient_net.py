@@ -24,11 +24,9 @@ class EfficientNetAudio(pl.LightningModule):
         self.train_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
 
         # Load pre-trained EfficientNet-B0
-        # Use pretrained weights for better transfer learning
         self.efficientnet = efficientnet_b0(weights=EfficientNet_B0_Weights.DEFAULT)
         
-        # Modify the first convolutional layer to accept 1-channel input (grayscale mel spectrograms)
-        # instead of the default 3-channel RGB images
+        # Modify depending on 'rich': 3, 32 or 'mel': 1, 32
         self.efficientnet.features[0][0] = nn.Conv2d(
             1, 32, kernel_size=3, stride=2, padding=1, bias=False
         )
@@ -45,6 +43,7 @@ class EfficientNetAudio(pl.LightningModule):
             gamma=gamma,
             alpha=alphas,
             reduction='mean',
+            task_type='multi-class',
             num_classes=num_classes
         )
 
@@ -87,7 +86,7 @@ class EfficientNetAudio(pl.LightningModule):
 
         # compute balanced accuracy
         preds = logits.argmax(dim=1)
-        balanced_acc = self.train_balanced_acc(preds, y_for_acc)
+        balanced_acc = self.val_balanced_acc(preds, y_for_acc)
         
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val_acc_balanced", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
