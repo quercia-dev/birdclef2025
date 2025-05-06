@@ -1,6 +1,5 @@
 from utility_data import *
 from utility_plots import *
-from focal_loss import FocalLoss
 from efficient_net import EfficientNetAudio
 
 import torch
@@ -37,8 +36,8 @@ class MelCNN(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         
-        self.val_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
-        self.train_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
+        self.val_acc = Accuracy(num_classes=num_classes, task='multiclass')
+        self.train_acc = Accuracy(num_classes=num_classes, task='multiclass')
 
         # input size: [B, 1, 128, 320]
         self.conv_layers = nn.Sequential(
@@ -69,12 +68,12 @@ class MelCNN(pl.LightningModule):
             nn.Dropout(0.2),
             nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(32, num_classes),
-            nn.Softmax(dim=1)
+            nn.Linear(32, num_classes)
         )
         
         self.alphas = alphas
         self.gamma = gamma
+        self.criterion = nn.CrossEntropyLoss(weight=self.alphas)
 
     def forward(self, x):
         x = self.conv_layers(x)
@@ -83,30 +82,36 @@ class MelCNN(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
+        logits = self(x) # [batch_size, num_classes]
         
-        probabilities = self(x)  # logits expected
-        log_probs = F.log_softmax(probabilities, dim=-1)  # [batch_size, num_classes]
-        weighted_log_probs = log_probs * self.alphas  # self.class_weights: [num_classes]
-        loss = -(y * weighted_log_probs).sum(dim=-1).mean()
-
-        balanced_acc = self.train_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
+        # Convert one-hot encoded targets to class indices if necessary
+        if y.dim() > 1 and y.size(1) > 1:  # One-hot encoded
+            y_idx = y.argmax(dim=1)
+        else:
+            y_idx = y
+        
+        loss = self.criterion(logits, y_idx)
+        acc = self.train_acc(logits.argmax(dim=1), y_idx)
         
         self.log("train_loss", loss, on_step=True, on_epoch=True)
-        self.log("train_acc_balanced", balanced_acc, on_step=True, on_epoch=True)
+        self.log("train_acc", acc, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
+        logits = self(x)  # [batch_size, num_classes]
         
-        probabilities = self(x)  # logits expected
-        log_probs = F.log_softmax(probabilities, dim=-1)  # [batch_size, num_classes]
-        weighted_log_probs = log_probs * self.alphas
-        loss = -(y * weighted_log_probs).sum(dim=-1).mean()
-
-        balanced_acc = self.val_balanced_acc(probabilities.argmax(dim=1), y.argmax(dim=1))
+        # Convert one-hot encoded targets to class indices if necessary
+        if y.dim() > 1 and y.size(1) > 1:  # One-hot encoded
+            y_idx = y.argmax(dim=1)
+        else:
+            y_idx = y
+        
+        loss = self.criterion(logits, y_idx)
+        acc = self.val_acc(logits.argmax(dim=1), y_idx)
         
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val_acc_balanced", balanced_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=self.gamma)
@@ -156,6 +161,8 @@ def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader
         logger = TensorBoardLogger('model/tb_logs', name=model_descr)
     elif args.log == 'csv':
         logger = CSVLogger("model/csv_logs", name=model_descr)
+    else:
+        logger = True
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         monitor='val_loss',
@@ -177,7 +184,6 @@ def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader
         logger=logger, 
         gradient_clip_val=1.0,  # Add gradient clipping
         gradient_clip_algorithm="norm",
-        precision=16,  # Use mixed precision for better numerical stability
         log_every_n_steps=10,
         enable_checkpointing=True,
         enable_progress_bar=True,
@@ -191,7 +197,7 @@ def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader
     print_elapsed(time.time()-start, model_descr)
     
     best_val_loss = checkpoint_callback.best_model_score.item()
-    best_val_acc = float(trainer.callback_metrics.get("val_acc_balanced", 0.0))
+    best_val_acc = float(trainer.callback_metrics.get("val_acc", 0.0))
 
     return best_val_loss, best_val_acc
 
@@ -217,7 +223,8 @@ if __name__ == '__main__':
         datafolder="data",
         metadata_csv="train_proc.csv",
         audio_dir="train_proc",
-        feature_mode='mel'
+        feature_mode='mel',
+        m=1
     )
     
     # use 20% of the total dataset
