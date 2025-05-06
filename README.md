@@ -165,7 +165,7 @@ On a last note, the final performance of the model is evaluated with 5-second-lo
 |         21116 | 13 sec |
 |       1564122 | 11 sec |
 
-- Very short or very long recordings: 63.83% of recordings are shorter than 30 sec, with the mode being 5 seconds. Recordings shorter than the context window must be augmented.
+- Very short or very long recordings: 63.83% of recordings are shorter than 30 sec, with the mode being 5 sec (taking 5 sec bins). 
 - Secondary Labels: information is present in the form of secondary labels, which are notably unreliable.
 - Soundscapes: a large amount of unlabelled audio data is present, which can give more information on the 'shape' of the audio data.
 
@@ -185,15 +185,15 @@ Do a variational study of how much data can be augmented before it starts to hur
 
 ## Labelling
 
-We include knowledge of the secondary labels by adding it to the probability of the training set, depending on parameter m in [0,1]. We start from one-hot encoding of the primary label, taken as the basis vector e_m, which we scale by m and to which we add the encoding vectors as the uniform probability of the secondary labels: (1-m)/(# secondary labels) for each possible secondary label. We fix 0.65 empirically.
+We use Informed Label Smoothing with Secondary Labels: we include knowledge of the secondary labels by adding it to the probability of the training set, depending on parameter $m \in [0,1]$. We start from one-hot encoding of the primary label, taken as the basis vector e_m, which we scale by m and to which we add the encoding vectors as the uniform probability of the secondary labels: $\frac{1-m}{\#\text{secondary labels}}$ for each possible secondary label. 
 
 We also include a 'null' label in the classifier, to account for lower confidence levels and deter 'hallucinations'. In data points without secondary labels, the leftover probability mass was placed in the 'null' label, to ensure the probability vector is consistent.
 
 ## Validation
 
-The purpose of the model is to correctly classify 5-second audio samples among 206 possible classes. Although the final task only requires a single class prediction per sample, we `relax` the problem by designing the model to output a full probability distribution across all classes. This allows us to evaluate not just the top prediction, but also the confidence and structure of the model’s uncertainty. We track both the deviation from the true probability distribution and the correctness of the top predicted label, which is the one with the highest predicted probability.
+The purpose of the model is to correctly classify 5-second audio samples among 206 possible classes. Although the final task only requires a single class prediction per sample, we _relax_ the problem by designing the model to output a full probability distribution across all classes. This allows us to evaluate not just the top prediction, but also the confidence and structure of the model’s uncertainty. We track both the deviation from the true probability distribution and the correctness of the top predicted label, which is the one with the highest predicted probability.
 
-The following key metrics are used to evaluate model performance: Focal Loss and Balanced Accuracy. Focal Loss is a modified version of cross-entropy loss that places more focus on hard-to-classify examples. It down-weights the loss assigned to well-classified examples and emphasizes those the model struggles with. This helps improve learning in imbalanced datasets, where some classes are underrepresented.
+The following key metrics are used to evaluate model performance: _Focal Loss_ and _Balanced Accuracy_. Focal Loss is a modified version of cross-entropy loss that places more focus on hard-to-classify examples. It down-weights the loss assigned to well-classified examples and emphasizes those the model struggles with. This helps improve learning in imbalanced datasets, where some classes are underrepresented.
 
 Loss quantifies how close the predicted probability vector is to the target distribution, usually a one-hot vector for classification tasks. A lower loss indicates that the model’s predicted probabilities are better aligned with the true labels. Accuracy, on the other hand, measures how often the class with the highest predicted probability matches the actual label.
 
@@ -201,21 +201,39 @@ We use both metrics because loss provides a continuous signal that reflects mode
 
 To address class imbalances, since some classes appear far more frequently than others, we resort to _Balanced Accuracy_. This metric computes the average of recall (true positive rate) for each class, ensuring that all classes contribute equally to the final score, regardless of their frequency in the dataset.
 
-<!---
-One shot classification of clips to filter human / no sound??
--->
+# Models
 
-## Data Filtering
-
-
+We experimented with different model architectures and validation methods to account for the imbalance in the training data, with varying degrees of success.
 
 ## CNN Architecture
 
-## Transformer Architecture
+As an initial experiment, we first studied the performance of a 'deep' CNN, with the following performance metrics: Cross Entropy Loss and Accuracy. At this stage, we simplified the labels by using one-hot encoding.
 
-# Classification Task 
+Starting from a random weights, we obtained a high accuracy ($\sim 0.17$). 
 
-# Model Evaluation
+## MelCNN
+
+We decided to restrict the input space to a simpler CNN architecture that uses only the Mel Spectrogram:
+
+<table border="1">
+  <tr><th>Architecture</th><th>Label m</th><th>Filter Data</th><th>CE Loss</th><th>Accuracy</th></tr>
+  <tr><td>MelCNN</td><td>1</td><td>first 5 sec</td><td></td><td></td></tr>
+  <tr><td>MelCNN</td><td>1</td><td>all 5 sec</td><td></td><td></td></tr>
+  <tr><td>MelCNN</td><td>0.65</td><td>first 5 sec</td><td></td><td></td></tr>
+  <tr><td>MelCNN</td><td>0.65</td><td>all 5 sec</td><td></td><td></td></tr>
+</table>
+
+## Augmented Data Filtering
+
+<table border="1">
+  <tr><th>Architecture</th><th>Label m</th><th>Filter Data</th><th>CE Loss</th><th>Accuracy</th></tr>
+    <tr><td>Simple CNN</td><td>best</td><td>best</td><td></td><td></td></tr>
+  <tr><td>EfficientNet</td><td>best</td><td>best</td><td></td><td></td></tr>
+</table>
+
+## Transfer Learning
+
+After our limited successes with training models from scratch, we opted to try a different approach: filtering the best data and using a pre-trained model.
 
 # Sources
 
@@ -230,6 +248,9 @@ HPC (High Performance Computer) shortcuts:
 - `scontrol show job <jobID>`: shows the extended status of the job as it was running
 - `scancel <jobID>`: stops the job
 
+The also use the ssh version of the copy command to transfer files back and forth between our devices and the cluster:
+
 ```
 scp -rT hpc:PRJ/birdclef2025/output ./data/output 
+scp -rT hpc:PRJ/birdclef2025/model ./data/model
 ```

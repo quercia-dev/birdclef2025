@@ -73,7 +73,7 @@ class EfficientNetAudio(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         # Gradient clipping during forward pass
-        with torch.cuda.amp.autocast(enabled=True):  # Mixed precision for stability
+        with torch.amp.autocast(device_type='cuda', dtype=torch.float16, enabled=True):
             logits = self(x)
             
             # Handle one hot encoded labels
