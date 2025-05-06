@@ -198,7 +198,7 @@ class AudioDataset(torch.utils.data.Dataset):
         transform=None, 
         metadata: bool=False, 
         feature_mode: str='mel', 
-        m:int=0.65,
+        m:float=0.65,
         audio_params: Optional[Dict]=None):
         """
         datafolder: name of the folder containing the data
