@@ -235,6 +235,40 @@ We decided to restrict the input space to a simpler CNN architecture that uses o
 
 After our limited successes with training models from scratch, we opted to try a different approach: filtering the best data and using a pre-trained model.
 
+# Data Filtering
+
+Our dataset consisted of audio recordings from three different sources: Xeno-Canto, iNaturalist, and the Colombian Sound Archive. We quickly identified several data quality challenges:
+
+- Inconsistent quality ratings across sources (only Xeno-Canto provided ratings)
+- Variable audio quality affecting model performance
+- Presence of silence, noise, and irrelevant sounds in recordings
+- Risk of losing representation for rare species during filtering
+
+To address these challenges, we implemented a two-stage data refinement process
+
+### Stage 1: Rating-Based Filtering
+
+We first leveraged the rating system available in the Xeno-Canto dataset:
+
+- Analyzed the distribution of ratings, finding most clips rated above 3.5
+- Identified that filtering out low-rated samples would affect only 0.19% of the data
+- Found two species (Jaguar '41970' and Spotted Foam-nest Frog '126247') that would be lost if strictly filtering by rating
+- Implemented a preservation strategy by retaining the top 5 highest-rated examples of these at-risk species
+
+This approach ensured we maintained representation across all 206 taxonomy labels while improving overall data quality.
+
+### Stage 2: YAMNet Audio Classification
+
+Since rating-based filtering only affected a small portion of our dataset, we implemented a more comprehensive approach using YAMNet, a deep neural network that classifies audio into 521 event classes:
+
+- Split all recordings into standardized 5-second segments
+- Used YAMNet to classify each segment with semantic labels (e.g., "Animal", "Bird", "Silence")
+- Created a curated list of 27 relevant audio classes to keep, including "Animal", "Wild animals", "Bird vocalization", "Frog", etc.
+- Removed segments classified as silence or containing irrelevant sounds
+- Verified that this filtering preserved representation across species
+
+This two-stage approach allowed us to significantly improve data quality while maintaining the label diversity. The filtered dataset provides cleaner, more relevant audio segments for model training, which should improve classification performance. The standardized 5-second segments also better match our target application, where we'll analyze soundscapes using similar-length segments.
+
 # Sources
 
 # Setup guide
