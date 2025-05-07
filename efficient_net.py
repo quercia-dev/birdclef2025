@@ -1,4 +1,3 @@
-from focal_loss import FocalLoss
 from utility_data import *
 from utility_plots import *
 
@@ -15,13 +14,12 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
 
-
 class EfficientNetAudio(pl.LightningModule):
-    def __init__(self, num_classes: int, gamma: float, alphas: torch.Tensor, learning_rate: float = 1e-3):
+    def __init__(self, num_classes: int):
         super().__init__()
         self.save_hyperparameters()
-        self.val_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
-        self.train_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
+        self.val_acc = Accuracy(num_classes=num_classes, task='multiclass')
+        self.train_acc = Accuracy(num_classes=num_classes, task='multiclass') 
 
         # Load pre-trained EfficientNet-B0
         self.efficientnet = efficientnet_b0(weights=EfficientNet_B0_Weights.DEFAULT)
@@ -36,18 +34,6 @@ class EfficientNetAudio(pl.LightningModule):
         self.efficientnet.classifier = nn.Sequential(
             nn.Dropout(p=0.2, inplace=True),
             nn.Linear(num_ftrs, num_classes)
-        )
-
-        if alphas is not None:
-            alphas = torch.clamp(alphas, min=0.05, max=0.95)
-
-        # initialize focal loss
-        self.focal_loss = FocalLoss(
-            gamma=gamma,
-            alpha=alphas,
-            reduction='mean',
-            task_type='multi-class',
-            num_classes=num_classes
         )
 
         # Add gradient clipping
@@ -83,7 +69,7 @@ class EfficientNetAudio(pl.LightningModule):
                 y_for_acc = y
                 
             # Compute focal loss with gradient tracking safeguards
-            loss = self.focal_loss(logits, y)
+            loss = F.cross_entropy(logits, y)
             
             # Detect and handle NaN loss
             if torch.isnan(loss) or torch.isinf(loss):
@@ -91,10 +77,9 @@ class EfficientNetAudio(pl.LightningModule):
                 # Use a small constant loss to allow backward pass but minimize impact
                 loss = torch.tensor(0.1, device=self.device, requires_grad=True)
             
-            # Compute balanced accuracy
             with torch.no_grad():  # Don't track gradients for metrics
                 preds = logits.argmax(dim=1)
-                balanced_acc = self.train_balanced_acc(preds, y_for_acc)
+                acc = self.train_acc(preds, y_for_acc)
         
         # Clip gradients for stability
         torch.nn.utils.clip_grad_norm_(self.parameters(), self.clip_value)
@@ -102,8 +87,8 @@ class EfficientNetAudio(pl.LightningModule):
         # Log metrics with proper sync and reduce operations
         self.log("train_loss_step", loss, on_step=True, on_epoch=False, prog_bar=True, sync_dist=True)
         self.log("train_loss_epoch", loss, on_step=False, on_epoch=True, sync_dist=True)
-        self.log("train_acc_balanced_step", balanced_acc, on_step=True, on_epoch=False, sync_dist=True)
-        self.log("train_acc_balanced_epoch", balanced_acc, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train_acc_step", acc, on_step=True, on_epoch=False, sync_dist=True)
+        self.log("train_acc_epoch", acc, on_step=False, on_epoch=True, sync_dist=True)
         
         return loss
 
@@ -120,7 +105,7 @@ class EfficientNetAudio(pl.LightningModule):
                 y_for_acc = y
                 
             # Compute focal loss
-            loss = self.focal_loss(logits, y)
+            loss = F.cross_entropy(logits, y)
             
             # Handle NaN loss
             if torch.isnan(loss) or torch.isinf(loss):
@@ -129,19 +114,19 @@ class EfficientNetAudio(pl.LightningModule):
             
             # Compute balanced accuracy
             preds = logits.argmax(dim=1)
-            balanced_acc = self.val_balanced_acc(preds, y_for_acc)
+            val_acc = self.val_acc(preds, y_for_acc)
         
         # Log metrics properly
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log("val_acc_balanced", balanced_acc, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("val_acc", val_acc, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         
-        return {"val_loss": loss, "val_acc": balanced_acc}
+        return {"val_loss": loss, "val_acc": val_acc}
 
     def configure_optimizers(self):
         # Use AdamW optimizer with weight decay and gradient clipping
         optimizer = torch.optim.AdamW(
             self.parameters(), 
-            lr=self.hparams.learning_rate, 
+            lr=1e-3, 
             weight_decay=0.01,
             eps=1e-8  # Increased epsilon for numerical stability
         )

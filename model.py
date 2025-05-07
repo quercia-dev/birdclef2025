@@ -32,7 +32,7 @@ def check_cuda():
 
 
 class MelCNN(pl.LightningModule):
-    def __init__(self, num_classes: int, gamma:int, alphas:torch.Tensor, learning_rate: float = 1e-3):
+    def __init__(self, num_classes: int):
         super().__init__()
         self.save_hyperparameters()
         
@@ -71,9 +71,7 @@ class MelCNN(pl.LightningModule):
             nn.Linear(32, num_classes)
         )
         
-        self.alphas = alphas
-        self.gamma = gamma
-        self.criterion = nn.CrossEntropyLoss(weight=self.alphas)
+        self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
         x = self.conv_layers(x)
@@ -114,7 +112,7 @@ class MelCNN(pl.LightningModule):
         self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate, weight_decay=self.gamma)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=2)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
     
@@ -148,13 +146,13 @@ def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=2):
     return train_loader, val_loader    
 
 
-def train_model(results_folder:str, args, gamma:float, alphas:list, train_loader, val_loader):
-    model_descr = f'{args.model}_g{gamma}'
+def train_model(results_folder:str, args, train_loader, val_loader):
+    model_descr = f'{args.model}'
 
     if args.model == 'melcnn':
-        model = MelCNN(num_classes=len(dataset.classes), gamma=gamma, alphas=alphas)
+        model = MelCNN(num_classes=len(dataset.classes))
     elif args.model == 'efficient':
-        model = EfficientNetAudio(num_classes=len(dataset.classes), gamma=2.0, alphas=alphas, learning_rate=1e-4)
+        model = EfficientNetAudio(num_classes=len(dataset.classes))
 
     # Select logger
     if args.log == 'tensor':
@@ -227,9 +225,6 @@ if __name__ == '__main__':
         m=1
     )
     
-    # use 20% of the total dataset
-    # dataset.data = dataset.data.sample(frac=0.2, random_state=42)
-
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
 
@@ -239,21 +234,6 @@ if __name__ == '__main__':
         shutil.rmtree(results_folder)
     os.makedirs(results_folder)
     
-    results_file = os.path.join(results_folder, 'grid_search.csv')
-    with open(results_file, mode='w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['gamma', 'null_alpha', 'best_val_loss', 'best_val_acc'])  # header
-
-    decay = [0, 0.1, 1, 3]
-    null_alpha = [0] # importance of the null vector in CE loss
-    for alpha in null_alpha:
-        for dec in decay:
-            alpha_t = torch.tensor([alpha], dtype=torch.float32)
-            alphas_augmented = torch.cat([alpha_t, dataset.alphas], dim=0).to(device)
-            best_val_loss, best_val_acc = train_model(results_folder, args, dec, alphas_augmented, train_loader, val_loader)
-
-            with open(results_file, mode='a', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow([dec, alpha, best_val_loss, best_val_acc])
-                
-            print(f"Logged results for gamma={dec}, null_alpha={alpha}, val_loss={best_val_loss:.4f}, val_acc={best_val_acc:.4f}")
+    best_val_loss, best_val_acc = train_model(results_folder, args, train_loader, val_loader)
+    
+    print(f'best_val_loss {best_val_loss}, best_val_acc {best_val_acc}')
