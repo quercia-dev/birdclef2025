@@ -166,6 +166,7 @@ def train_model(results_folder:str, args, train_loader, val_loader):
         monitor='val_loss',
         mode='min',
         save_top_k=1,
+        save_last=True,
         filename='{epoch}-{val_loss:.2f}',
         dirpath=os.path.join(results_folder, f'checkpoints/{model_descr}'),
         every_n_epochs=1
@@ -177,7 +178,7 @@ def train_model(results_folder:str, args, train_loader, val_loader):
         mode='min'
     )
     trainer = pl.Trainer(
-        max_epochs=5, 
+        max_epochs=15, 
         callbacks=[checkpoint_callback, early_stop_callback], 
         logger=logger, 
         gradient_clip_val=1.0,  # Add gradient clipping
@@ -257,7 +258,7 @@ if __name__ == '__main__':
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
 
-    results_folder = './model'
+    results_folder = './model_filtered'
     
     if os.path.exists(results_folder):
         shutil.rmtree(results_folder)
