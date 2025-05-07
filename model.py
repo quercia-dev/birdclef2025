@@ -184,8 +184,7 @@ def train_model(results_folder:str, args, train_loader, val_loader):
         gradient_clip_algorithm="norm",
         log_every_n_steps=10,
         enable_checkpointing=True,
-        enable_progress_bar=True,
-        detect_anomaly=True,  # Help catch NaN issues
+        enable_progress_bar=True
         )
 
     print("Begin training", model_descr)
