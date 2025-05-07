@@ -149,10 +149,10 @@ def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=2):
 def train_model(results_folder:str, args, train_loader, val_loader):
     model_descr = f'{args.model}'
 
-    if args.model == 'melcnn':
-        model = MelCNN(num_classes=len(dataset.classes))
-    elif args.model == 'efficient':
+    if args.model == 'efficient':
         model = EfficientNetAudio(num_classes=len(dataset.classes))
+    elif args.model == 'melcnn':
+        model = MelCNN(num_classes=len(dataset.classes))
 
     # Select logger
     if args.log == 'tensor':
@@ -177,7 +177,7 @@ def train_model(results_folder:str, args, train_loader, val_loader):
         mode='min'
     )
     trainer = pl.Trainer(
-        max_epochs=20, 
+        max_epochs=5, 
         callbacks=[checkpoint_callback, early_stop_callback], 
         logger=logger, 
         gradient_clip_val=1.0,  # Add gradient clipping
@@ -209,7 +209,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Audio classification training script")
     parser.add_argument('--log', choices=['tensor', 'csv'], default='csv',
                         help='Choose the logger: "tensor" for TensorBoard, "csv" for CSV logger (default: csv)')
-    parser.add_argument('--model', choices=['melcnn', 'efficient'], default='melcnn',
+    parser.add_argument('--model', choices=['melcnn', 'efficient'], default='efficient',
                         help='Choose the model architecture: "melcnn" (default) or "efficient"')
 
     args = parser.parse_args()
@@ -223,6 +223,36 @@ if __name__ == '__main__':
         feature_mode='mel',
         m=1
     )
+    # limits the dataset to relevant labels
+    selected_labels = ['Animal', 
+                        'Wild animals', 
+                        'Insect', 
+                        'Cricket',
+                        'Bird', 
+                        'Bird vocalization, bird call, bird song', 
+                        'Frog', 
+                        'Snake', 
+                        'Whistling', 
+                        'Owl', 
+                        'Crow', 
+                        'Rodents, rats, mice', 
+                        'Livestock, farm animals, working animals', 
+                        'Pig', 
+                        'Squeak', 
+                        'Domestic animals, pets', 
+                        'Dog', 
+                        'Turkey', 
+                        'Bee, wasp, etc.', 
+                        'Duck', 
+                        'Chicken, rooster', 
+                        'Horse', 
+                        'Goose', 
+                        'Squawk', 
+                        'Chirp tone', 
+                        'Sheep', 
+                        'Pigeon, dove']
+
+    dataset.data = dataset.data[dataset.data['yamnet'].isin(selected_labels)]
     
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
