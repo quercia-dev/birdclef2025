@@ -285,6 +285,6 @@ HPC (High Performance Computer) shortcuts:
 The also use the ssh version of the copy command to transfer files back and forth between our devices and the cluster:
 
 ```
-scp -rT hpc:PRJ/birdclef2025/output ./data/output 
-scp -rT hpc:PRJ/birdclef2025/model ./data/model
+scp -rT hpc:PRJ/birdclef2025/output/. output
+scp -rT hpc:PRJ/birdclef2025/model/. model
 ```
