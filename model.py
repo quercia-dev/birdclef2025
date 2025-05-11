@@ -146,29 +146,30 @@ def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=2):
     return train_loader, val_loader    
 
 
-def train_model(results_folder:str, args, train_loader, val_loader):
+def train_model(results_folder:str, args, train_loader, val_loader, num_classes: int):
     model_descr = f'{args.model}'
 
     if args.model == 'efficient':
-        model = EfficientNetAudio(num_classes=len(dataset.classes))
+        model = EfficientNetAudio(num_classes=num_classes)
     elif args.model == 'melcnn':
-        model = MelCNN(num_classes=len(dataset.classes))
+        model = MelCNN(num_classes=num_classes)
 
+    logsdir = os.path.join(results_folder, f'{args.log}_logs')
     # Select logger
     if args.log == 'tensor':
-        logger = TensorBoardLogger('model/tb_logs', name=model_descr)
+        logger = TensorBoardLogger(logsdir, name=model_descr)
     elif args.log == 'csv':
-        logger = CSVLogger("model/csv_logs", name=model_descr)
+        logger = CSVLogger(logsdir)
     else:
-        logger = True
-
+        raise ValueError(f'Unrecognized logger option: {args.log}')
+    
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         monitor='val_loss',
         mode='min',
         save_top_k=1,
         save_last=True,
         filename='{epoch}-{val_loss:.2f}',
-        dirpath=os.path.join(results_folder, f'checkpoints/{model_descr}'),
+        dirpath=os.path.join(results_folder, 'checkpoints'),
         every_n_epochs=1
     )
     early_stop_callback = pl.callbacks.EarlyStopping(
@@ -178,7 +179,7 @@ def train_model(results_folder:str, args, train_loader, val_loader):
         mode='min'
     )
     trainer = pl.Trainer(
-        max_epochs=15, 
+        max_epochs=args.epochs, 
         callbacks=[checkpoint_callback, early_stop_callback], 
         logger=logger, 
         gradient_clip_val=1.0,  # Add gradient clipping
@@ -210,10 +211,22 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Audio classification training script")
     parser.add_argument('--log', choices=['tensor', 'csv'], default='csv',
                         help='Choose the logger: "tensor" for TensorBoard, "csv" for CSV logger (default: csv)')
+    
     parser.add_argument('--model', choices=['melcnn', 'efficient'], default='efficient',
                         help='Choose the model architecture: "melcnn" (default) or "efficient"')
 
+    parser.add_argument('--epochs', type=int, default=10,
+                        help='Number of epochs to train the model for: 10 is default')
+
+    parser.add_argument('--dataset', choices=['labelled', 'yamnet'], default='labelled',
+                        help='Choose the data to train the model on: labelled or yamnet')
+
+    parser.add_argument('--mass', type=float, default=1.0,
+                        help='Set importance m ∈ [0,1] for primary labels; 1.0 means one-hot encoding')
+
     args = parser.parse_args()
+    
+    print('Running arguments: ', args)
 
     device = check_cuda()
     
@@ -222,48 +235,53 @@ if __name__ == '__main__':
         metadata_csv="train_proc.csv",
         audio_dir="train_proc",
         feature_mode='mel',
-        m=1
+        m=args.mass
     )
-    # limits the dataset to relevant labels
-    selected_labels = ['Animal', 
-                        'Wild animals', 
-                        'Insect', 
-                        'Cricket',
-                        'Bird', 
-                        'Bird vocalization, bird call, bird song', 
-                        'Frog', 
-                        'Snake', 
-                        'Whistling', 
-                        'Owl', 
-                        'Crow', 
-                        'Rodents, rats, mice', 
-                        'Livestock, farm animals, working animals', 
-                        'Pig', 
-                        'Squeak', 
-                        'Domestic animals, pets', 
-                        'Dog', 
-                        'Turkey', 
-                        'Bee, wasp, etc.', 
-                        'Duck', 
-                        'Chicken, rooster', 
-                        'Horse', 
-                        'Goose', 
-                        'Squawk', 
-                        'Chirp tone', 
-                        'Sheep', 
-                        'Pigeon, dove']
+    if args.dataset == 'yamnet':
+        # limits the dataset to relevant labels
+        selected_labels = ['Animal', 
+                            'Wild animals', 
+                            'Insect', 
+                            'Cricket',
+                            'Bird', 
+                            'Bird vocalization, bird call, bird song', 
+                            'Frog', 
+                            'Snake', 
+                            'Whistling', 
+                            'Owl', 
+                            'Crow', 
+                            'Rodents, rats, mice', 
+                            'Livestock, farm animals, working animals', 
+                            'Pig', 
+                            'Squeak', 
+                            'Domestic animals, pets', 
+                            'Dog', 
+                            'Turkey', 
+                            'Bee, wasp, etc.', 
+                            'Duck', 
+                            'Chicken, rooster', 
+                            'Horse', 
+                            'Goose', 
+                            'Squawk', 
+                            'Chirp tone', 
+                            'Sheep', 
+                            'Pigeon, dove']
 
-    dataset.data = dataset.data[dataset.data['yamnet'].isin(selected_labels)]
+        dataset.filter_by_values('yamnet', selected_labels)
     
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
 
-    results_folder = './model_filtered'
+    results_folder = f'./model/{args.model}_{args.dataset}_{args.mass}_{time.strftime("%m%d%H%M%S")}'
     
     if os.path.exists(results_folder):
         shutil.rmtree(results_folder)
     os.makedirs(results_folder)
     
-    best_val_loss, best_val_acc = train_model(results_folder, args, train_loader, val_loader)
+    best_val_loss, best_val_acc = train_model(results_folder, 
+                                              args, 
+                                              train_loader, 
+                                              val_loader, 
+                                              num_classes=len(dataset.classes))
     
     print(f'best_val_loss {best_val_loss}, best_val_acc {best_val_acc}')

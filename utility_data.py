@@ -254,7 +254,14 @@ class AudioDataset(torch.utils.data.Dataset):
         self.m = m
         
         self.labels = self._get_torch_labels()
-                
+        
+    def filter_by_values(self, column: str, selected_labels: list):
+        """Filter the DataFrame to only include rows where the column's value is in selected_labels.
+        Returns True if the column exists, otherwise does nothing and returns False."""
+        colExists = column in self.data.columns
+        if colExists:        
+            self.data = self.data[self.data[column].isin(selected_labels)]                
+        return colExists
                         
     def calculate_label_tensor(self, row: pd.Series) -> torch.Tensor:
         """
