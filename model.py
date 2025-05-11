@@ -12,7 +12,6 @@ from torchmetrics.classification import Accuracy
 
 import time
 import argparse
-import csv
 import shutil
 
 def check_cuda():
@@ -38,6 +37,7 @@ class MelCNN(pl.LightningModule):
         
         self.val_acc = Accuracy(num_classes=num_classes, task='multiclass')
         self.train_acc = Accuracy(num_classes=num_classes, task='multiclass')
+        self.criterion = nn.CrossEntropyLoss()
 
         # input size: [B, 1, 128, 320]
         self.conv_layers = nn.Sequential(
@@ -71,8 +71,7 @@ class MelCNN(pl.LightningModule):
             nn.Linear(32, num_classes)
         )
         
-        self.criterion = nn.CrossEntropyLoss()
-
+        
     def forward(self, x):
         x = self.conv_layers(x)
         x = self.global_pool(x)
@@ -81,33 +80,22 @@ class MelCNN(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x) # [batch_size, num_classes]
-        
-        # Convert one-hot encoded targets to class indices if necessary
-        if y.dim() > 1 and y.size(1) > 1:  # One-hot encoded
-            y_idx = y.argmax(dim=1)
-        else:
-            y_idx = y
-        
-        loss = self.criterion(logits, y_idx)
-        acc = self.train_acc(logits.argmax(dim=1), y_idx)
+                
+        loss = self.criterion(logits, y)
+        acc = self.train_acc(logits.argmax(dim=1), y.argmax(dim=1))
         
         self.log("train_loss", loss, on_step=True, on_epoch=True)
         self.log("train_acc", acc, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x)  # [batch_size, num_classes]
-        
-        # Convert one-hot encoded targets to class indices if necessary
-        if y.dim() > 1 and y.size(1) > 1:  # One-hot encoded
-            y_idx = y.argmax(dim=1)
-        else:
-            y_idx = y
-        
-        loss = self.criterion(logits, y_idx)
-        acc = self.val_acc(logits.argmax(dim=1), y_idx)
-        
+        with torch.no_grad():
+            x, y = batch
+            logits = self(x)  # [batch_size, num_classes]
+            
+            loss = self.criterion(logits, y)
+            acc = self.train_acc(logits.argmax(dim=1), y.argmax(dim=1))
+            
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
 
