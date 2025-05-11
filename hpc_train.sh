@@ -18,4 +18,5 @@ eval "$(conda shell.bash hook)"
 
 conda activate birdclef
 
-python model.py
+python model.py --model melcnn --epochs 3 --dataset labelled
+python model.py --model melcnn --epochs 3 --dataset yamnet
