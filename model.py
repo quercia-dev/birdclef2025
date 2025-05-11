@@ -260,7 +260,7 @@ if __name__ == '__main__':
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
 
-    results_folder = f'./model/{args.model}_{args.dataset}_{args.mass}_{time.strftime("%m%d%H%M%S")}'
+    results_folder = f'./model/{time.strftime("%Y%m%d_%H%M%S")}_{args.model}_{args.dataset}_{args.mass}'
     
     if os.path.exists(results_folder):
         shutil.rmtree(results_folder)
