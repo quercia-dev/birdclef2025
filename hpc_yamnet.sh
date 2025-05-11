@@ -18,4 +18,8 @@ eval "$(conda shell.bash hook)"
 
 conda activate yamnet
 
-python yamnet.py
+# label the training data
+python yamnet.py --audios_folder train_proc --metadata_csv train_proc.csv --output_file train_proc_yamn.csv
+
+# label the soundscapes data
+python yamnet.py --audios_folder train_soundscapes_proc --metadata_csv train_soundscapes_proc.csv --output_file train_soundscapes_proc_yamn.csv

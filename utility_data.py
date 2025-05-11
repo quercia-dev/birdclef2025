@@ -646,7 +646,18 @@ if __name__ == '__main__':
         datafolder="data",
         metadata_csv="train.csv",
         audio_dir="train_audio",
-        feature_mode='',
+        feature_mode="",
         audio_params=audio_params,
         metadata=True
-    ).preprocess(output='train_proc')
+    ).preprocess(output="train_proc")
+    
+    # split the soundscapes as well
+    
+    AudioDataset(
+        datafolder="data",
+        metadata_csv="",
+        audio_dir="train_soundscapes",
+        feature_mode="",
+        audio_params=audio_params,
+        metadata=True
+    ).preprocess(output="train_soundscapes_proc")

@@ -2,6 +2,7 @@ import csv
 import io
 import os
 import ast
+import argparse
 
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -9,13 +10,28 @@ import tensorflow_hub as hub
 import numpy as np
 import pandas as pd
 
-import soundfile
 import librosa
 
-data_folder = "data/train_proc"
-data_file = "data/train_proc.csv"
-output_file = "data/train_proc_yamn.csv"
+parser = argparse.ArgumentParser(description="YAMNet label extraction script")
+
+parser.add_argument('--data', type=str, default='data/',
+                    help='Root folder containing audio and metadata files (default: data/)')
+parser.add_argument('--audios_folder', type=str, default='train_proc',
+                    help='Subfolder within data/ containing the audio files (default: train_proc)')
+parser.add_argument('--metadata_csv', type=str, default='train_proc.csv',
+                    help='Metadata CSV file name in data/ (default: train_proc.csv)')
+parser.add_argument('--output_file', type=str, default='train_proc_yamn.csv',
+                    help='Output CSV filename to save labels (default: train_proc_yamn.csv)')
+
+args = parser.parse_args()
+
+# Construct full paths
+data_folder = os.path.join(args.data, args.audios_folder)
+data_file = os.path.join(args.data, args.metadata_csv)
+output_file = os.path.join(args.data, args.output_file)
+
 TARGET_SR = 16000  # Target sample rate
+
 
 def load_resample(file_path):
     """Loads and resamples audio to TARGET_SR using librosa, returns TF-compatible array"""
@@ -24,8 +40,9 @@ def load_resample(file_path):
     audio = librosa.resample(audio, orig_sr=sr, target_sr=TARGET_SR)
     return audio.astype(np.float32)
 
-
-model = hub.load('https://www.kaggle.com/models/google/yamnet/TensorFlow2/yamnet/1')
+# Offline Setup: mkdir data/yamnet and therein...
+# curl -L -o model.tar.gz https://www.kaggle.com/api/v1/models/google/yamnet/tensorFlow2/yamnet/1/download
+model = hub.load(os.path.join(args.data, 'yamnet'))
 
 # Find the name of the class with the top score when mean-aggregated across frames.
 def class_names_from_csv(class_map_csv_text):
@@ -52,3 +69,5 @@ data = data.explode('filename', ignore_index=True)
 data['yamnet'] = data['filename'].apply(lambda path: yamnet_classification(os.path.join(os.getcwd(), data_folder, path)))
 
 data.to_csv(output_file, index=False)
+
+print('\n Yamnet Operation Concluded Successfully \n')
