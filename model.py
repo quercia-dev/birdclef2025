@@ -206,7 +206,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=10,
                         help='Number of epochs to train the model for: 10 is default')
 
-    parser.add_argument('--dataset', choices=['labelled', 'yamnet'], default='labelled',
+    parser.add_argument('--dataset', choices=['labelled', 'yamnet', 'yamnet_light'], default='labelled',
                         help='Choose the data to train the model on: labelled or yamnet')
 
     parser.add_argument('--mass', type=float, default=1.0,
@@ -254,8 +254,11 @@ if __name__ == '__main__':
                             'Chirp tone', 
                             'Sheep', 
                             'Pigeon, dove']
-
         dataset.filter_by_values('yamnet', selected_labels)
+
+    elif args.dataset == 'yamnet_light':
+        selected_labels = ['Silence', 'Speech', 'Vehicle']
+        dataset.filter_by_values('yamnet', selected_labels, include=False)
     
     train_loader, val_loader = create_dataloaders(dataset)
     print("Constructed training data infrastructure")
