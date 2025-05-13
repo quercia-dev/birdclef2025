@@ -61,7 +61,7 @@ def classification(waveform):
 
 
 def sample(idx: int):
-    waveform, _ = dataset[idx]
+    waveform = dataset.get_feature(idx)
     waveform = waveform.clone().detach().unsqueeze(0)
     return int(classification(waveform))
     

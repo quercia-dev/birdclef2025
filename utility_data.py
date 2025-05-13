@@ -176,7 +176,8 @@ class AudioDataset(torch.utils.data.Dataset):
 
             # parses to list the columns                
             for col in ['type', 'secondary_labels', 'filename']:
-                data[col] = data[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x)
+                if col in data.columns:
+                    data[col] = data[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x)
 
             # create a new row for each filename
             return data.explode('filename', ignore_index=True)
@@ -321,22 +322,22 @@ class AudioDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.data)
 
-
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        # get metadata row of specified index
+    def get_feature(self, idx) -> torch.Tensor:
         row = self.data.iloc[idx]
-        label = self.labels[idx]
         audio_path = os.path.join(self.audio_dir, row["filename"])
 
         if self.feature_mode == '':
-            return torch.load(audio_path, weights_only=True), label
+            return torch.load(audio_path, weights_only=True)
         elif self.feature_mode == 'mel':
             mel_spec, _ = self._extract_spectrogram(audio_path)
-            return mel_spec.clone().detach(), label
+            return mel_spec.clone().detach()
         elif self.feature_mode == 'rich':
-            return self._get_features(audio_path), label
+            return self._get_features(audio_path)
         else:
-            return self._get_waveform(audio_path), label
+            return self._get_waveform(audio_path)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self.get_feature(idx), self.labels[idx]
        
         
     def get(self, idx: int):
