@@ -1,6 +1,7 @@
 from utility_data import *
 from utility_plots import *
 from efficient_net import EfficientNetAudio
+from melcnn import MelCNN
 
 import torch
 import torch.nn as nn 
