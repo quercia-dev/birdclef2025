@@ -18,5 +18,5 @@ eval "$(conda shell.bash hook)"
 
 conda activate birdclef
 
-python model.py --model efficient --epochs 10 --dataset yamnet_light --mass 1.0
-python model.py --model efficient --epochs 10 --dataset yamnet_light --mass 0.8
+python model.py --model efficient --epochs 10 --dataset labelled --mass 1.0
+python model.py --model efficient --epochs 10 --dataset labelled --mass 0.7
