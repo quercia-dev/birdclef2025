@@ -1,14 +1,7 @@
-from utility_data import *
-from utility_plots import *
-
-
 import torch
 import torch.nn as nn 
 import pytorch_lightning as pl
-import torch.nn.functional as F 
-from pytorch_lightning.loggers import CSVLogger
 from torchmetrics.classification import Accuracy
-from torch.utils.data import DataLoader, random_split
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
 
@@ -18,6 +11,8 @@ class EfficientNetAudio(pl.LightningModule):
         self.save_hyperparameters()
         self.val_acc = Accuracy(num_classes=num_classes, task='multiclass')
         self.train_acc = Accuracy(num_classes=num_classes, task='multiclass') 
+        # Add balanced accuracy metrics
+        self.val_balanced_acc = Accuracy(num_classes=num_classes, task='multiclass', average='macro')
         self.criterion = nn.CrossEntropyLoss()
         
         # Load pre-trained EfficientNet-B0
@@ -55,18 +50,18 @@ class EfficientNetAudio(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-
-        with torch.no_grad():
-            logits = self(x)
-            
-            loss = self.criterion(logits, y)
-            val_acc = self.val_acc(logits.argmax(dim=1), y.argmax(dim=1))
+        logits = self(x)
+        
+        loss = self.criterion(logits, y)
+        val_acc = self.val_acc(logits.argmax(dim=1), y.argmax(dim=1))
+        val_balanced_acc = self.val_balanced_acc(logits.argmax(dim=1), y.argmax(dim=1))
         
         # Log metrics properly
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         self.log("val_acc", val_acc, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("val_balanced_acc", val_balanced_acc, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         
-        return {"val_loss": loss, "val_acc": val_acc}
+        return {"val_loss": loss, "val_acc": val_acc, "val_balanced_acc": val_balanced_acc}
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(

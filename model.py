@@ -3,13 +3,9 @@ from utility_plots import *
 from efficient_net import EfficientNetAudio
 from melcnn import MelCNN
 
-import torch
-import torch.nn as nn 
-import torch.nn.functional as F 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
-from torchmetrics.classification import Accuracy
 
 import time
 import argparse
@@ -29,81 +25,6 @@ def check_cuda():
         device = torch.device("cpu")
         print("Using CPU")
     return device
-
-
-class MelCNN(pl.LightningModule):
-    def __init__(self, num_classes: int):
-        super().__init__()
-        self.save_hyperparameters()
-        
-        self.val_acc = Accuracy(num_classes=num_classes, task='multiclass')
-        self.train_acc = Accuracy(num_classes=num_classes, task='multiclass')
-        self.criterion = nn.CrossEntropyLoss()
-
-        # input size: [B, 1, 128, 320]
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),  # [B, 32, 128, 320]
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(2, 1)),            # [B, 32, 64, 160]
-            nn.Dropout(0.2),
-
-            nn.Conv2d(32, 64, kernel_size=3, padding=1), # [B, 64, 64, 160]
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(2, 2)),            # [B, 64, 32, 80]
-            nn.Dropout(0.2),
-
-            nn.Conv2d(64, 64, kernel_size=3, padding=1), # [B, 64, 32, 80]
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-        )
-
-        # global avg pool to avoid large FC layer
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
-
-        self.classifier = nn.Sequential(
-            nn.Flatten(),           # [B, 64]
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, num_classes)
-        )
-        
-        
-    def forward(self, x):
-        x = self.conv_layers(x)
-        x = self.global_pool(x)
-        return self.classifier(x)
-
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x) # [batch_size, num_classes]
-                
-        loss = self.criterion(logits, y)
-        acc = self.train_acc(logits.argmax(dim=1), y.argmax(dim=1))
-        
-        self.log("train_loss", loss, on_step=True, on_epoch=True)
-        self.log("train_acc", acc, on_step=True, on_epoch=True)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        with torch.no_grad():
-            x, y = batch
-            logits = self(x)  # [batch_size, num_classes]
-            
-            loss = self.criterion(logits, y)
-            acc = self.train_acc(logits.argmax(dim=1), y.argmax(dim=1))
-            
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=2)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
     
 
 def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=2):
@@ -121,7 +42,8 @@ def create_dataloaders(dataset, batch_size=32, val_split=0.2, num_workers=2):
     """
     train_size = int((1 - val_split) * len(dataset))
     val_size = len(dataset) - train_size
-    train_set, val_set = random_split(dataset, [train_size, val_size])
+    g = torch.Generator().manual_seed(25) # fixed seed for reproducibility
+    train_set, val_set = random_split(dataset, [train_size, val_size], generator=g)
 
     train_loader = DataLoader(
         train_set, batch_size=batch_size, shuffle=True,
@@ -186,8 +108,9 @@ def train_model(results_folder:str, args, train_loader, val_loader, num_classes:
     
     best_val_loss = checkpoint_callback.best_model_score.item()
     best_val_acc = float(trainer.callback_metrics.get("val_acc", 0.0))
+    best_val_balanced_acc = float(trainer.callback_metrics.get("val_balanced_acc", 0.0))
 
-    return best_val_loss, best_val_acc
+    return best_val_loss, best_val_acc, best_val_balanced_acc
 
 def print_elapsed(elapsed_time, descr:str = 'Model'):    
     hours = elapsed_time // 3600
@@ -270,10 +193,13 @@ if __name__ == '__main__':
         shutil.rmtree(results_folder)
     os.makedirs(results_folder)
     
-    best_val_loss, best_val_acc = train_model(results_folder, 
+    best_val_loss, best_val_acc, best_val_balanced_acc = train_model(results_folder, 
                                               args, 
                                               train_loader, 
                                               val_loader, 
                                               num_classes=len(dataset.classes))
     
-    print(f'best_val_loss {best_val_loss}, best_val_acc {best_val_acc}')
+    print(f'Final Results:')
+    print(f'Best validation loss: {best_val_loss:.4f}')
+    print(f'Best validation accuracy: {best_val_acc:.4f}')
+    print(f'Best validation balanced accuracy: {best_val_balanced_acc:.4f}')
