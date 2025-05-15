@@ -16,7 +16,7 @@ class Config:
 
     DEBUG_MODE = False
 
-    OUTPUT_DIR = 'test'
+    OUTPUT_DIR = 'data'
     DATA_ROOT = 'data'
     FS = 32000
 
