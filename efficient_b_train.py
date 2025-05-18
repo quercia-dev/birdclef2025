@@ -290,11 +290,18 @@ def validate(model, loader, criterion, device):
 
     auc = calculate_auc(all_targets, all_outputs)
     avg_loss = np.mean(losses)
-    
+
     predicted_classes = np.argmax(all_outputs, axis=1)
+
+    if all_targets.ndim == 2 and all_targets.shape[1] > 1:
+        all_targets = np.argmax(all_targets, axis=1)
+    elif all_targets.ndim == 1:
+        pass  # already correct shape
+    else:
+        raise ValueError(f"Unexpected shape for all_targets: {all_targets.shape}")
+
     val_acc = accuracy_score(all_targets, predicted_classes)
     val_acc_balanced = balanced_accuracy_score(all_targets, predicted_classes)
-        
     return avg_loss, auc, val_acc, val_acc_balanced
 
 def run_training(df, cfg):
@@ -421,7 +428,7 @@ def run_training(df, cfg):
             lr = optimizer.param_groups[0]['lr']
             elapsed = time.time() - epoch_start_time
             
-            with open(os.path.join(results_folder), mode='a', newline='') as f:
+            with open(metrics_file, mode='a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([
                     global_step, fold, epoch + 1,
