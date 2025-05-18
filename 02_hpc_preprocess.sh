@@ -16,4 +16,4 @@ eval "$(conda shell.bash hook)"
 
 conda activate birdclef
 
-python utility_data.py
+python audio_to_mel.py
