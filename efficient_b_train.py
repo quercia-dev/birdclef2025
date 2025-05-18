@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, accuracy_score, balanced_accuracy_score
 import librosa
 
 import torch
@@ -289,13 +289,18 @@ def validate(model, loader, criterion, device):
 
     auc = calculate_auc(all_targets, all_outputs)
     avg_loss = np.mean(losses)
-
-    return avg_loss, auc
-
+    
+    predicted_classes = np.argmax(all_outputs, axis=1)
+    val_acc = accuracy_score(all_targets, predicted_classes)
+    val_acc_balanced = balanced_accuracy_score(all_targets, predicted_classes)
+        
+    return avg_loss, auc, val_acc, val_acc_balanced
 
 def run_training(df, cfg):
     """Training function that can either use pre-computed spectrograms or generate them on-the-fly"""
 
+    results_folder = f'./model/{time.strftime("%Y%m%d_%H%M%S")}_efficientb0'
+    
     taxonomy_df = pd.read_csv(cfg.taxonomy_csv)
     species_ids = taxonomy_df['primary_label'].tolist()
     cfg.num_classes = len(species_ids)
@@ -389,7 +394,7 @@ def run_training(df, cfg):
                 scheduler if isinstance(scheduler, lr_scheduler.OneCycleLR) else None
             )
 
-            val_loss, val_auc = validate(model, val_loader, criterion, cfg.device)
+            val_loss, val_auc, val_acc, val_acc_bal = validate(model, val_loader, criterion, cfg.device)
 
             if scheduler is not None and not isinstance(scheduler, lr_scheduler.OneCycleLR):
                 if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
@@ -398,7 +403,7 @@ def run_training(df, cfg):
                     scheduler.step()
 
             print(f"Train Loss: {train_loss:.4f}, Train AUC: {train_auc:.4f}")
-            print(f"Val Loss: {val_loss:.4f}, Val AUC: {val_auc:.4f}")
+            print(f"Val Loss: {val_loss:.4f}, Val AUC: {val_auc:.4f}, Val Acc: {val_acc:.4f}, Val Bal Acc: {val_acc_bal:.4f}")
 
             if val_auc > best_auc:
                 best_auc = val_auc
@@ -413,7 +418,7 @@ def run_training(df, cfg):
                     'val_auc': val_auc,
                     'train_auc': train_auc,
                     'cfg': cfg
-                }, f"model_fold{fold}.pth")
+                }, os.path.join(results_folder, f"model_fold{fold}.pth"))
 
         best_scores.append(best_auc)
         print(f"\nBest AUC for fold {fold}: {best_auc:.4f} at epoch {best_epoch}")
