@@ -18,5 +18,8 @@ eval "$(conda shell.bash hook)"
 
 conda activate birdclef
 
-python 98_audio_to_mel.py
-python 99_train.py
+python audio_to_mel.py
+
+echo 'Finished audio_to_mel.py'
+
+python efficient_b_train.py

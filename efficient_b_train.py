@@ -7,6 +7,7 @@ import gc
 import time
 import cv2
 import math
+import csv
 import warnings
 from pathlib import Path
 
@@ -300,7 +301,14 @@ def run_training(df, cfg):
     """Training function that can either use pre-computed spectrograms or generate them on-the-fly"""
 
     results_folder = f'./model/{time.strftime("%Y%m%d_%H%M%S")}_efficientb0'
-    
+    os.makedirs(results_folder, exist_ok=True)
+
+    metrics_file = os.path.join(results_folder, 'metrics.csv')
+    with open(metrics_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['step', 'fold', 'epoch', 'train_loss', 'train_auc', 'val_loss', 
+                         'val_auc', 'val_acc', 'val_bal_acc', 'lr', 'time'])
+
     taxonomy_df = pd.read_csv(cfg.taxonomy_csv)
     species_ids = taxonomy_df['primary_label'].tolist()
     cfg.num_classes = len(species_ids)
@@ -329,11 +337,14 @@ def run_training(df, cfg):
     skf = StratifiedKFold(n_splits=cfg.n_fold, shuffle=True, random_state=cfg.seed)
 
     best_scores = []
-
+    
+    global_step = 0
+    
     for fold, (train_idx, val_idx) in enumerate(skf.split(df, df['primary_label'])):
         if fold not in cfg.selected_folds:
             continue
-
+        epoch_start_time = time.time()
+        
         print(f'\n{"="*30} Fold {fold} {"="*30}')
 
         train_df = df.iloc[train_idx].reset_index(drop=True)
@@ -383,6 +394,8 @@ def run_training(df, cfg):
         best_epoch = 0
 
         for epoch in range(cfg.epochs):
+            epoch_start_time = time.time()
+            
             print(f"\nEpoch {epoch+1}/{cfg.epochs}")
 
             train_loss, train_auc = train_one_epoch(
@@ -405,6 +418,19 @@ def run_training(df, cfg):
             print(f"Train Loss: {train_loss:.4f}, Train AUC: {train_auc:.4f}")
             print(f"Val Loss: {val_loss:.4f}, Val AUC: {val_auc:.4f}, Val Acc: {val_acc:.4f}, Val Bal Acc: {val_acc_bal:.4f}")
 
+            lr = optimizer.param_groups[0]['lr']
+            elapsed = time.time() - epoch_start_time
+            
+            with open(os.path.join(results_folder), mode='a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    global_step, fold, epoch + 1,
+                    f"{train_loss:.6f}", f"{train_auc:.6f}",
+                    f"{val_loss:.6f}", f"{val_auc:.6f}",
+                    f"{val_acc:.6f}", f"{val_acc_bal:.6f}",
+                    f"{lr:.8f}", f"{elapsed:.2f}"
+                ])
+
             if val_auc > best_auc:
                 best_auc = val_auc
                 best_epoch = epoch + 1
@@ -419,6 +445,8 @@ def run_training(df, cfg):
                     'train_auc': train_auc,
                     'cfg': cfg
                 }, os.path.join(results_folder, f"model_fold{fold}.pth"))
+                
+            global_step += 1
 
         best_scores.append(best_auc)
         print(f"\nBest AUC for fold {fold}: {best_auc:.4f} at epoch {best_epoch}")
