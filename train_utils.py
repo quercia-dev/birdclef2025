@@ -137,6 +137,14 @@ class BirdCLEFDatasetFromNPY(Dataset):
         self.num_classes = len(self.species_ids)
         self.label_to_idx = {label: idx for idx, label in enumerate(self.species_ids)}
 
+        self.class_counts = df['primary_label'].value_counts().to_dict()
+        median_count = np.median(list(self.class_counts.values()))
+        self.underrepresented_classes = {cls: count for cls, count in self.class_counts.items() 
+                                    if count < median_count}
+    
+        print(f"Identified {len(self.underrepresented_classes)} underrepresented classes out of {self.num_classes}")
+
+
         if 'filepath' not in self.df.columns:
             self.df['filepath'] = self.cfg.train_datadir + '/' + self.df.filename
 
@@ -157,6 +165,7 @@ class BirdCLEFDatasetFromNPY(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         samplename = row['samplename']
+        primary_label = row['primary_label']
         spec = None
 
         if self.spectrograms and samplename in self.spectrograms:
@@ -171,8 +180,15 @@ class BirdCLEFDatasetFromNPY(Dataset):
 
         spec = torch.tensor(spec, dtype=torch.float32).unsqueeze(0)  # Add channel dimension
 
-        if self.mode == "train" and random.random() < self.cfg.aug_prob:
-            spec = self.apply_spec_augmentations(spec)
+        is_underrepresented = primary_label in self.underrepresented_classes
+
+        if self.mode == "train":
+            # Always augment underrepresented classes in training
+            if is_underrepresented:
+                spec = self.apply_spec_augmentations(spec, is_underrepresented=True)
+            # Regular probability for well-represented classes
+            elif random.random() < self.cfg.aug_prob:
+                spec = self.apply_spec_augmentations(spec, is_underrepresented=False)
 
         target = self.encode_label(row['primary_label'])
 
@@ -192,31 +208,60 @@ class BirdCLEFDatasetFromNPY(Dataset):
             'filename': row['filename']
         }
 
-    def apply_spec_augmentations(self, spec):
-        """Apply augmentations to spectrogram"""
-
+    def apply_spec_augmentations(self, spec, is_underrepresented=False):
+        """Apply augmentations to spectrogram with class-aware strategy"""
+        
+        # Base augmentation probability
+        base_prob = 0.5
+        
+        # For underrepresented classes, increase probability and intensity
+        if is_underrepresented:
+            base_prob = 0.8
+            intensity_factor = 1.5
+        else:
+            intensity_factor = 1.0
+            
         # Time masking (horizontal stripes)
-        if random.random() < 0.5:
-            num_masks = random.randint(1, 3)
+        if random.random() < base_prob:
+            num_masks = random.randint(1, 4 if is_underrepresented else 3)
             for _ in range(num_masks):
-                width = random.randint(5, 20)
+                width = random.randint(5, int(25 * intensity_factor))
                 start = random.randint(0, spec.shape[2] - width)
                 spec[0, :, start:start+width] = 0
 
         # Frequency masking (vertical stripes)
-        if random.random() < 0.5:
-            num_masks = random.randint(1, 3)
+        if random.random() < base_prob:
+            num_masks = random.randint(1, 4 if is_underrepresented else 3)
             for _ in range(num_masks):
-                height = random.randint(5, 20)
+                height = random.randint(5, int(25 * intensity_factor))
                 start = random.randint(0, spec.shape[1] - height)
                 spec[0, start:start+height, :] = 0
 
         # Random brightness/contrast
-        if random.random() < 0.5:
-            gain = random.uniform(0.8, 1.2)
-            bias = random.uniform(-0.1, 0.1)
+        if random.random() < base_prob:
+            gain = random.uniform(0.7 if is_underrepresented else 0.8, 
+                                1.3 if is_underrepresented else 1.2)
+            bias = random.uniform(-0.15 if is_underrepresented else -0.1, 
+                                0.15 if is_underrepresented else 0.1)
             spec = spec * gain + bias
-            spec = torch.clamp(spec, 0, 1) 
+            spec = torch.clamp(spec, 0, 1)
+            
+        # Add pitch shift simulation (frequency stretching) for underrepresented only
+        if is_underrepresented and random.random() < 0.6:
+            stretch_factor = random.uniform(0.9, 1.1)
+            orig_size = spec.shape[1]
+            stretched = F.interpolate(
+                spec.unsqueeze(0), 
+                size=(int(orig_size * stretch_factor), spec.shape[2]), 
+                mode='bilinear',
+                align_corners=False
+            ).squeeze(0)
+            
+            # Resize back to original dimensions
+            if stretch_factor > 1.0:
+                spec = stretched[:, :orig_size, :]
+            else:
+                spec = F.pad(stretched, (0, 0, 0, orig_size - stretched.shape[1], 0, 0))
 
         return spec
 
