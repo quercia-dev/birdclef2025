@@ -1,4 +1,5 @@
 from train_utils import *
+from utility_plots import plot_confusion_matrix
 
 import os
 import logging
@@ -22,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 
 from tqdm.auto import tqdm
 
@@ -86,7 +87,7 @@ class CFG:
 
     def update_debug_settings(self):
         if self.debug:
-            self.epochs = 2
+            self.epochs = 1
             self.selected_folds = [0]
 
 cfg = CFG()
@@ -323,6 +324,13 @@ def run_training(df, cfg):
     if cfg.debug:
         cfg.update_debug_settings()
 
+    # df Subset check, needed after random_split 90-10 split
+    if hasattr(df, 'indices') and hasattr(df, 'dataset'):
+        # It's a Subset from random_split, convert back to DataFrame
+        train_df = df.dataset.iloc[df.indices].reset_index(drop=True)
+    else:
+        train_df = df  # Already a DataFrame
+
     spectrograms = None
     if cfg.LOAD_DATA:
         print("Loading pre-computed mel spectrograms from NPY file...")
@@ -347,21 +355,21 @@ def run_training(df, cfg):
     
     global_step = 0
     
-    for fold, (train_idx, val_idx) in enumerate(skf.split(df, df['primary_label'])):
+    for fold, (train_idx, val_idx) in enumerate(skf.split(train_df, train_df['primary_label'])):
         if fold not in cfg.selected_folds:
             continue
         epoch_start_time = time.time()
         
         print(f'\n{"="*30} Fold {fold} {"="*30}')
 
-        train_df = df.iloc[train_idx].reset_index(drop=True)
-        val_df = df.iloc[val_idx].reset_index(drop=True)
+        fold_train_df = train_df.iloc[train_idx].reset_index(drop=True)
+        fold_val_df = train_df.iloc[val_idx].reset_index(drop=True)
 
-        print(f'Training set: {len(train_df)} samples')
-        print(f'Validation set: {len(val_df)} samples')
+        print(f'Training set: {len(fold_train_df)} samples')
+        print(f'Validation set: {len(fold_val_df)} samples')
 
-        train_dataset = BirdCLEFDatasetFromNPY(train_df, cfg, spectrograms=spectrograms, mode='train')
-        val_dataset = BirdCLEFDatasetFromNPY(val_df, cfg, spectrograms=spectrograms, mode='valid')
+        train_dataset = BirdCLEFDatasetFromNPY(fold_train_df, cfg, spectrograms=spectrograms, mode='train')
+        val_dataset = BirdCLEFDatasetFromNPY(fold_val_df, cfg, spectrograms=spectrograms, mode='valid')
 
         train_loader = DataLoader(
             train_dataset, 
@@ -471,11 +479,11 @@ def run_training(df, cfg):
     print("="*60)
 
 if __name__ == "__main__":
-    import time
 
     print("\nLoading training data...")
     train_df = pd.read_csv(cfg.train_csv)
     taxonomy_df = pd.read_csv(cfg.taxonomy_csv)
+    class_names = taxonomy_df['primary_label'].tolist()
 
     print("\nStarting training...")
     print(f"LOAD_DATA is set to {cfg.LOAD_DATA}")
@@ -484,8 +492,113 @@ if __name__ == "__main__":
     else:
         print("Will generate spectrograms on-the-fly during training")
 
-    run_training(train_df, cfg)
+
+    train_len = int(0.9 * len(train_df))
+    val_len = len(train_df) - train_len
+
+    generator = torch.Generator().manual_seed(42)
+    train_set, val_set = random_split(train_df, [train_len, val_len], generator=generator)
+
+    # Store the timestamp before training to use for loading the model later
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    results_folder = f'./model/{timestamp}_efficientb0'
+    
+    # Store spectrograms reference before training
+    if cfg.LOAD_DATA:
+        try:
+            spectrograms = np.load(cfg.spectrogram_npy, allow_pickle=True).item()
+        except Exception as e:
+            spectrograms = None
+            print(f"Error loading pre-computed spectrograms: {e}")
+    else:
+        spectrograms = None
+    
+    run_training(train_set, cfg)
 
     print("\nTraining complete!")
+
+    print("Unseen validation")
+
+    # Load the best model from the first fold using the stored timestamp
+    best_model_path = os.path.join(results_folder, "model_fold0.pth")
+
+    if os.path.exists(best_model_path):
+        print(f"Loading best model from {best_model_path}")
+        checkpoint = torch.load(best_model_path, weights_only = False)
+        cfg = checkpoint['cfg']  # Load the config used during training
+        model = BirdCLEFModel(cfg).to(cfg.device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.eval()  # Set the model to evaluation mode
+    else:
+        raise FileNotFoundError(f"No saved model found at {best_model_path}")
+
+    # Properly extract the validation dataframe
+    val_indices = val_set.indices
+    unseen_val_df = train_df.iloc[val_indices].reset_index(drop=True)
+
+    # Create dataset and dataloader for unseen validation
+    unseen_val_dataset = BirdCLEFDatasetFromNPY(unseen_val_df, cfg, spectrograms=spectrograms, mode='valid')
+    
+    # Import required for collate_fn if not already defined
+    from sklearn.metrics import confusion_matrix
+    
+    unseen_val_loader = DataLoader(
+        unseen_val_dataset,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        num_workers=cfg.num_workers,
+        pin_memory=True,
+        collate_fn=collate_fn
+    )
+
+    # Run validation on the unseen data
+    criterion = get_criterion(cfg)
+    val_loss, val_auc, val_acc, val_acc_bal = validate(model, unseen_val_loader, criterion, cfg.device)
+
+    print(f"Unseen Validation Loss: {val_loss:.4f}, Unseen Validation AUC: {val_auc:.4f}, Unseen Validation Acc: {val_acc:.4f}, Unseen Validation Bal Acc: {val_acc_bal:.4f}")
+
+    # Generate predictions for confusion matrix
+    all_targets = []
+    all_predicted = []
+
+    with torch.no_grad():
+        for batch in tqdm(unseen_val_loader, desc="Unseen Validation Prediction"):
+            inputs = batch['melspec'].to(cfg.device)
+            targets = batch['target'].to(cfg.device)
+
+            outputs = model(inputs)
+            predicted = torch.argmax(outputs, dim=1).cpu().numpy()
+            targets = torch.argmax(targets, dim=1).cpu().numpy()
+
+            all_targets.extend(targets)
+            all_predicted.extend(predicted)
+
+    confusion_file = os.path.join(results_folder, "confusion_results.csv")
+
+    # Write header if file doesn't exist
+    if not os.path.exists(confusion_file):
+        with open(confusion_file, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['targets', 'predictions'])
+    
+    # Append results
+    with open(confusion_file, mode='a', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            str(all_targets), str(all_predicted),
+        ])
+
+    # Create confusion matrix
+    conf_matrix = confusion_matrix(all_targets, all_predicted)
+
+    plot_path = os.path.join(results_folder, "final_confusion_matrix.png")
+
+    plot_confusion_matrix(
+    cm=confusion_matrix, 
+    classes=class_names, 
+    normalize=False,
+    title='Confusion Matrix',
+    save_path=plot_path
+    )
 
 
