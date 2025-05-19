@@ -102,37 +102,6 @@ Our dataset consisted of audio recordings from three different sources: Xeno-Can
 - Presence of silence, noise, and irrelevant sounds in recordings
 - Risk of losing representation for rare species during filtering
 
-
-# Audio Preprocessing
-
-To make the analysis more computationally tractable, we experiment with reducing the audio samples using Mel and MFCC coefficients.
-
-Mel and MFCC coefficients are both ways to extract relevant features from audio data: the Mel transform is a remapping of audio data to the Mel scale, defined in terms of perceived pitch and modeled after human auditory perception.
-
-On the other hand, MFCC coefficients are a more compressed representation derived from the Mel spectrogram, capturing the overall spectral envelope of the sound by applying a Discrete Cosine Transform (DCT) to the log-Mel energies. This process reduces dimensionality and emphasizes the most informative features for tasks like speech and speaker recognition.
-
-Compared to raw spectrograms, Mel and MFCC representations are more compact and robust to noise and variations. For the purposes of our investigation, we compare performance of models on both inputs, though we see distinctly better results with the MEL transform. For this reason, we spent more time studying the MEL coefficients, as the loss of information from MFCC coefficients was too great for deep neural networks: 
-
-![](img/scape_spectrogram.png)
-
-## Clustering
-
-For the purpose of training a classifier model, we are interested in segmenting the recordings by label: we compare the performance of different clustering algorithms on normally standardized Mel coefficients.
-
-- _K-means_: the simplest conceptually, performed reasonably well, but it involved the added difficulty of setting the number of clusters beforehand.
-![](img/train_spectrogram_12_kmeans.png)
-- _DBSCAN_: unlimited number of clusters, tweak epsilon and min size
-![](img/train_spectrogram_12_dbscan.png)
-- _Agglomerative clustering_: we identified 'ward' as the best clustering rule. We attribute this to minimizing total variance within the cluster, preferring "self-contained" units.
-
-In order to enforce wider cluster windows, we also experimented with different ways to enforce continuity of the clusters in time: first encouraging time continuity by adding the time index to the data as an additional column, and second by experimenting with enforcing it as a hardcoded constraint. In both cases, we were unable to produce distinct results that could be usable for an initial filtering.
-
-We also attempted to perform clustering on MFCC coefficients, but we were not able to produce results even comparable to the mel ones: clusters would form around audio without discernible differences, as if the microphone would collect additional details, not relevant to the classification task. These results further discouraged us from using MFCC coefficients in our investigation.
-
-We also experimented with K-means clustering, using the primary and secondary labels as a reference for the number of clusters, accounting for an extra cluster given by 'unlabelled'.
-
-Overall, tweaking the cluster parameters was effective on a case by case basis, but the sensitivity to changes in the recording setup, especially across different origins for the data makes it an ineffective tool for the segmentation of the whole dataset, especially considering the performance on unlabelled data. We concluded that clustering was not a viable approach for isolating the bird calls within full recordings, given its limited effectiveness and high sensitivity to recording variations. We moved to explore alternative ways of extracting the animal calls, detailing our methods in the following sections.
-
 # Challenges to Modelling
 
 A number of distinctive characteristics of the dataset and the final output of the model limit our abilities to use traditional training practices and model architectures. We first list them in this section for completeness, before explaining the experiments that we ran, with the respective results.
@@ -149,7 +118,7 @@ In this investigation, we do not include external data sources, and compile our 
 
 On a last note, the final performance of the model is evaluated with 5-second-long samples. With this, we always split samples into **5 sec** intervals and use model architectures that are hardcoded to this size.
 
-## Challenges of the data
+## Difficulty with the data
 
 Some audio samples in the labelled dataset are spliced with human voices explaining the microphone setup. Moreover, some audios contained large proportions of static noise, with no relevant information in those cases.
 
@@ -168,15 +137,23 @@ The labelled recordings were characterized with an extreme degree of class imbal
 |         21116 | 13 sec |
 |       1564122 | 11 sec |
 
-In addition most recordings, are short, with only some being significantly long: 64% of recordings were shorter than 30 sec, with the mode being 5 sec when considering a 5 sec bin size. 
+In addition most recordings, are short, with only some being considerably longer than the mean: 64% of recordings were shorter than 30 sec, with the mode being 5 sec when considering a 5 sec bin size. 
 
 Though the audio recordings were labelled by a reliable 'primary_label' feature, we also have access to a less reliable secondary labels. This motivated a consideration of different levels of trustworthiness for this secondary labels, which we explored through the use of an m parameter, obtaining a wide range of performance.
 
-Unlabelled recordings: almost half of the dataset is composed of same-length recordings, which may give more information on the 'shape' of the audio data.
+Unlabelled recordings: almost half of the dataset is composed of unlabelled recordings, all of the same length, which may give more information on the 'shape' of the audio data, but does not provide additional information through labelling.
 
-# Data Handling
+# Audio Preprocessing
 
-To aid in training, we first focused our study on labelled data, using a variety of filtering techniques and comparing the performance of different models. This procedure involved using a flexible `Dataset` object, which we extended to handle different data and training regimes.
+To make the analysis more computationally tractable, we experiment with reducing the audio samples using Mel and MFCC coefficients.
+
+Mel and MFCC coefficients are both ways to extract relevant features from audio data: the Mel transform is a remapping of audio data to the Mel scale, defined in terms of perceived pitch and modeled after human auditory perception.
+
+On the other hand, MFCC coefficients are a more compressed representation derived from the Mel spectrogram, capturing the overall spectral envelope of the sound by applying a Discrete Cosine Transform (DCT) to the log-Mel energies. This process reduces dimensionality and emphasizes the most informative features for tasks like speech and speaker recognition.
+
+Compared to raw spectrograms, Mel and MFCC representations are more compact and robust to noise and variations. For the purposes of our investigation, we compare performance of models on both inputs, though we see distinctly better results with the MEL transform. For this reason, we spent more time studying the MEL coefficients, as the loss of information from MFCC coefficients was too great for deep neural networks: 
+
+![](img/scape_spectrogram.png)
 
 ## Audio Splicing
 
@@ -184,9 +161,29 @@ The final classification task involves identifying bird species present within a
 
 When training the early models, we noticed that computing the mel spectrograms of each recording was a major bottleneck: a cpu-intensive task that impeded training. As a natural result, we opted to save the mel transforms to file, saving only the transformed clips.
 
-# Data Filtering
-
 Since our first experiment of clustering the data to segment audio proved to be unsuccessful, we tried different methods of filtering the data.
+
+## Condensing the Dataset
+
+Since labelled audios vary in length and often include sources of external noise, which do not correspond to the labels, we are interested in removing the worst examples of training data, to improve the quality of the dataset, in order to train a classifier model only the best data. We approach this problem by first evaluating the performance of clustering algorithms.
+
+## Clustering
+
+We proceed by comparing the performance of different clustering algorithms on normalized Mel coefficients.
+
+- _K-means_: the simplest conceptually, performed reasonably well, but it involved the added difficulty of setting the number of clusters beforehand.
+![](img/train_spectrogram_12_kmeans.png)
+- _DBSCAN_: unlimited number of clusters, tweak epsilon and min size
+![](img/train_spectrogram_12_dbscan.png)
+- _Agglomerative clustering_: we identified 'ward' as the best clustering rule. We attribute this to minimizing total variance within the cluster, preferring "self-contained" units.
+
+In order to enforce wider cluster windows, we also experimented with different ways to enforce continuity of the clusters in time: first encouraging time continuity by adding the time index to the data as an additional column, and second by experimenting with enforcing it as a hardcoded constraint. In both cases, we were unable to produce distinct results that could be usable for an initial filtering.
+
+We also attempted to perform clustering on MFCC coefficients, but we were not able to produce results even comparable to the mel ones: clusters would form around audio without discernible differences, as if the microphone would collect additional details, not relevant to the classification task. These results further discouraged us from using MFCC coefficients in our investigation.
+
+We also experimented with K-means clustering, using the primary and secondary labels as a reference for the number of clusters, accounting for an extra cluster given by 'unlabelled'.
+
+Overall, tweaking the cluster parameters was effective on a case by case basis, but the sensitivity to changes in the recording setup, especially across different origins for the data makes it an ineffective tool for the segmentation of the whole dataset, especially considering the performance on unlabelled data. We concluded that clustering was not a viable approach for isolating the bird calls within full recordings, given its limited effectiveness and high sensitivity to recording variations. We moved to explore alternative ways of extracting the animal calls, detailing our methods in the following sections.
 
 ## Rating-Based Filtering
 
@@ -231,7 +228,7 @@ The purpose of the model is to correctly classify 5-second audio samples among 2
 
 In this preliminary phase, we use Cross Entropy Loss and Accuracy as our indicators of error.
 
-# Experimentation Models
+# Experiments with Models
 
 We build towards the task of soft classification using models of increasing complexity, before converging on a state-of-the-art solution, extended with data augmentation. 
 
@@ -239,39 +236,70 @@ It should be noted that the baseline accuracy of a model which was guessing rand
 
 We used a 80-20 train test data split, tracking the validation Cross Entropy Loss and Accuracy metrics at the end of every epoch. For completeness, we show the results for the EfficientNet architecture.
 
-## CNN Architecture
+# MelCNN
 
-As an initial experiment, we first studied the performance of a 'deep' CNN, with the following performance metrics: Cross Entropy Loss and Accuracy. At this stage, we simplified the labels by only using one-hot encoding, in order to derive a baseline for performance.
+As an initial experiment, we first studied the performance of a 'deep' CNN, with the following performance metrics: Cross Entropy Loss and Accuracy.  We decided to restrict the input space to a simpler CNN architecture that uses only the Mel Spectrogram. Compared to the more complex architectures tested later, MelCNN was trained for fewer epochs and without data augmentation or label smoothing. The models below explore different values for the label mixing factor m and input filtering strategies. 
 
-Starting from a random weights, we obtained an accuracy of $0.17$. 
+Performance across configurations varied, but remained poor, with all accuracies below 0.05, which indicate both underfitting and limitations in model capacity. Moreover, although soft labeling (m=0.8) on the "Animal" (Yamnet) subset slightly improves accuracy, we noticed that training on the full dataset with one-hot encoding (m=1.0) was more consistent in producing low accuracy (~0.0261–0.0298), even when extended to 10 epochs.
 
-## MelCNN
-
-We decided to restrict the input space to a simpler CNN architecture that uses only the Mel Spectrogram:
+Finally, "Animal" filtering generally performs better than "All" despite fewer training samples, likely due to cleaner or more consistent labeling.
 
 <table border="1">
-  <tr><th>Architecture</th><th>Label m</th><th>Filter Data</th><th>CE Loss</th><th>Accuracy</th></tr>
-  <tr><td>MelCNN</td><td>1</td><td>first 5 sec</td><td></td><td></td></tr>
-  <tr><td>MelCNN</td><td>1</td><td>all 5 sec</td><td></td><td></td></tr>
-  <tr><td>MelCNN</td><td>0.65</td><td>first 5 sec</td><td></td><td></td></tr>
-  <tr><td>MelCNN</td><td>0.65</td><td>all 5 sec</td><td></td><td></td></tr>
+  <tr><th>Data</th><th>Epochs</th><th>Encoding</th><th>Accuracy</th><th>Hash</th></tr>
+  <tr><td>All</td><td>10</td><td>1.0</td><td>0.0298</td><td>c580a9c1</td></tr>
+  <tr><td>All</td><td>3</td><td>1.0</td><td>0.0261</td><td>c580a9c1</td></tr>
+  <tr><td>Animal</td><td>3</td><td>1.0</td><td>0.0397</td><td>c580a9c1</td></tr>
+  <tr><td>All</td><td>3</td><td>1.0</td><td>0.0261</td><td>5a6176d1</td></tr>
+  <tr><td>Animal</td><td>3</td><td>0.8</td><td>0.0402</td><td>5a6176d1</td></tr>
 </table>
 
-## Augmented Data Filtering
+Empirically, we decided to stop training after 3 epochs, as we saw little improvements after, probably due to limited model capacity.
 
-<table border="1">
-  <tr><th>Architecture</th><th>Label m</th><th>Filter Data</th><th>CE Loss</th><th>Accuracy</th></tr>
-    <tr><td>Simple CNN</td><td>best</td><td>best</td><td></td><td></td></tr>
-  <tr><td>EfficientNet</td><td>best</td><td>best</td><td></td><td></td></tr>
-</table>
+After seeing the poor results of this preliminary architecture, we decided to consider a more complex model, trained for a longer time, in order to improve generalization and achieve higher accuracies.
 
 ## EfficientNet
 
 After our limited successes with training models from scratch, we opted to try a different approach: filtering the best data and using a pre-trained model.
 
+<!-- EfficientNet Training Accuracy -->
+<table border="1">
+  <tr><th>Data</th><th>Epochs</th><th>Encoding</th><th>Train Acc.</th><th>Hash</th></tr>
+  <tr><td>All</td><td>15</td><td>1.0</td><td>0.770</td><td>c580a9c1</td></tr>
+  <tr><td>Animal</td><td>15</td><td>1.0</td><td>0.760</td><td>9964eb55</td></tr>
+</table>
+
+As an initial step, we tested the model's ability to fit to the data, observing a high training accuracy (0.77 and 0.76) on both full and filtered ("Animal") datasets with one-hot encoding (m=1.0).
+
+Small gap between All and Animal datasets suggests that both contain learnable patterns, and EfficientNet is robust across them.
+
+<!-- EfficientNet Evaluation Results -->
+<table border="1">
+  <tr><th>Data</th><th>Epochs</th><th>Encoding</th><th>Accuracy</th><th>Bal Acc</th><th>Hash</th></tr>
+  <tr><td>All</td><td>10</td><td>1.0</td><td>0.476</td><td>/</td><td>8b600946</td></tr>
+  <tr><td>All</td><td>10</td><td>0.8</td><td>0.451</td><td>/</td><td>8b600946</td></tr>
+  <tr><td>Light</td><td>8/10</td><td>1.0</td><td>0.315</td><td>/</td><td>781592e6</td></tr>
+  <tr><td>Light</td><td>6/10</td><td>0.8</td><td>0.266</td><td>/</td><td>781592e6</td></tr>
+  <tr><td>All</td><td>10</td><td>1.0</td><td>0.4983</td><td>0.400</td><td>0a242441</td></tr>
+  <tr><td>All</td><td>6/10</td><td>0.7</td><td>0.343</td><td>0.304</td><td>0a242441</td></tr>
+</table>
+
+In the experiments, we noticed signs of overfitting: the model reached a training accuracy of about 0.77, but its evaluation accuracy on the same dataset (with hard labels, m=1.0) was significantly lower at 0.476. This gap suggests the model may be learning patterns that don't generalize well, even on familiar data.
+
+We also tested soft labeling by adjusting the label confidence to m=0.8. Interestingly, this slightly decreased performance, dropping the evaluation accuracy to 0.451. This indicates that, at least in our setup, soft labeling may hurt performance—potentially because it introduces uncertainty or emphasizes less confident predictions, which could confuse the model.
+
+To reduce noise in the dataset, we applied a filtering step using Light Yamnet, which resulted in a noticeable drop in accuracy compared to using the full dataset. This suggests that while filtering may reduce noise, it can also remove useful diversity that helps the model generalize better.
+
+When we combined filtering with soft labeling, performance degraded even further. This aligns with the idea that soft supervision might not be effective when the dataset is already sparse or contains weak signals—adding uncertainty in such cases can be more harmful than helpful.
+
+Overall, the best performance (validation accuracy = 0.4983) was achieved when using the full dataset with hard labels (m=1.0). This supports the conclusion that, for our setup, full supervision with confident labels is the most effective approach.
+
+Finally, we found that very soft labels (m=0.7) combined with early stopping (after 6 out of 10 training epochs) led to a significant drop in both accuracy (down to 0.343) and balanced accuracy (0.304). This further highlights how sensitive the model is to supervision quality and training strategy.
+
+Moreover, to better understand the evolution of performance, we plot the evolution of loss a run of efficientNet. 
+
 ![](img/efficient_loss_accuracy_plot.png)
 
-We noticed that overfitting is a true concern training with this kind of data, especially considering that the model is of size much larger than the total number of training samples.
+We notice that overfitting is a true concern training with this kind of data, especially considering that the model is of size much larger than the total number of training samples.
 
 ## Takeaways of the experiments
 
@@ -283,9 +311,9 @@ A simple model like the MelCNN is not able to capture the full image of the data
 
 Given the limited amounts of data, overfitting is a real concern, which warrants the use of more sophisticated techniques to avoid it, notably Balanced Accuracy and Cross-Fold validation.
 
-# Final Model
+# Comparison with EfficientNet B0
 
-In line with the our observations on the exploratory models, we address shortcomings and limitations by applying some key changes and producing a new model, which is more aligned with State-Of-The-Art solutions.
+In line with the our observations on the exploratory models, we address shortcomings and limitations by applying some key changes and producing a new model, which is more aligned with State-Of-The-Art solutions. 
 
 To address class imbalances, since some classes appear far more frequently than others, we resort to Balanced Accuracy. This metric computes the average of recall (true positive rate) for each class, ensuring that all classes contribute equally to the final score, regardless of their frequency in the dataset.
 
@@ -296,6 +324,16 @@ Loss quantifies how close the predicted probability vector is to the target dist
 We use both metrics because loss provides a continuous signal that reflects model confidence and can guide training, even when predictions are incorrect. Accuracy, in contrast, is discrete and only measures final decision correctness.
 
 Finally, we use cross validation to reduce the risk of overfitting on the data during the training phase. This is also relevant in training the final, complete model on the whole dataset, as a 100-0 split would  lack a reliable accuracy metric to decide when to stop the training.
+
+### Results
+
+Observing the evolution of loss, we observe a similar phenomenon as in the previous implementation of efficientNet: the model is slow to generalize, despite the advantages of the new configuration, together with the availability of the full training dataset.
+
+![](img/efficientb_loss_kfold.png)
+
+On a second note, validation accuracy falls within the previous results, though it is higher as a result of the enlarged training data.
+
+![](img/efficientb_acc_kfold.png.png)
 
 # Sources
 
