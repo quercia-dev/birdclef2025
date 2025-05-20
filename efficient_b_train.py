@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.ERROR)
 class CFG:
 
     seed = 42
-    debug = False  
+    debug = False 
     apex = False
     print_freq = 100
     num_workers = 2
@@ -115,9 +115,6 @@ class BirdCLEFModel(nn.Module):
         if 'efficientnet' in cfg.model_name:
             backbone_out = self.backbone.classifier.in_features
             self.backbone.classifier = nn.Identity()
-        elif 'resnet' in cfg.model_name:
-            backbone_out = self.backbone.fc.in_features
-            self.backbone.fc = nn.Identity()
         else:
             backbone_out = self.backbone.get_classifier().in_features
             self.backbone.reset_classifier(0, '')
@@ -352,6 +349,7 @@ def run_training(df, cfg):
     skf = StratifiedKFold(n_splits=cfg.n_fold, shuffle=True, random_state=cfg.seed)
 
     best_scores = []
+    best_fold_indices = []
     
     global_step = 0
     
@@ -464,6 +462,7 @@ def run_training(df, cfg):
             global_step += 1
 
         best_scores.append(best_auc)
+        best_fold_indices.append(fold)
         print(f"\nBest AUC for fold {fold}: {best_auc:.4f} at epoch {best_epoch}")
 
         # Clear memory
@@ -471,12 +470,18 @@ def run_training(df, cfg):
         torch.cuda.empty_cache()
         gc.collect()
 
+    best_score_idx = np.argmax(best_scores)
+    best_fold = best_fold_indices[best_score_idx]
+    best_model_path = os.path.join(results_folder, f"model_fold{best_fold}.pth")
+
     print("\n" + "="*60)
     print("Cross-Validation Results:")
     for fold, score in enumerate(best_scores):
         print(f"Fold {cfg.selected_folds[fold]}: {score:.4f}")
     print(f"Mean AUC: {np.mean(best_scores):.4f}")
     print("="*60)
+
+    return results_folder, best_model_path
 
 if __name__ == "__main__":
 
@@ -498,10 +503,6 @@ if __name__ == "__main__":
 
     generator = torch.Generator().manual_seed(42)
     train_set, val_set = random_split(train_df, [train_len, val_len], generator=generator)
-
-    # Store the timestamp before training to use for loading the model later
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    results_folder = f'./model/{timestamp}_efficientb0'
     
     # Store spectrograms reference before training
     if cfg.LOAD_DATA:
@@ -513,14 +514,11 @@ if __name__ == "__main__":
     else:
         spectrograms = None
     
-    run_training(train_set, cfg)
+    results_folder, best_model_path = run_training(train_set, cfg)
 
     print("\nTraining complete!")
 
     print("Unseen validation")
-
-    # Load the best model from the first fold using the stored timestamp
-    best_model_path = os.path.join(results_folder, "model_fold0.pth")
 
     if os.path.exists(best_model_path):
         print(f"Loading best model from {best_model_path}")
