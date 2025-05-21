@@ -520,11 +520,13 @@ if __name__ == "__main__":
 
     print("Unseen validation")
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if os.path.exists(best_model_path):
         print(f"Loading best model from {best_model_path}")
+        checkpoint = torch.load(best_model_path, map_location=device, weights_only = False)
         checkpoint = torch.load(best_model_path, weights_only = False)
         cfg = checkpoint['cfg']  # Load the config used during training
-        model = BirdCLEFModel(cfg).to(cfg.device)
+        model = BirdCLEFModel(cfg).to(device)
         model.load_state_dict(checkpoint['model_state_dict'])
         model.eval()  # Set the model to evaluation mode
     else:
@@ -561,42 +563,22 @@ if __name__ == "__main__":
 
     with torch.no_grad():
         for batch in tqdm(unseen_val_loader, desc="Unseen Validation Prediction"):
-            inputs = batch['melspec'].to(cfg.device)
-            targets = batch['target'].to(cfg.device)
+            inputs = batch['melspec'].to(device)
+            targets = batch['target'].to(device)
 
             outputs = model(inputs)
             predicted = torch.argmax(outputs, dim=1).cpu().numpy()
             targets = torch.argmax(targets, dim=1).cpu().numpy()
 
-            all_targets.extend(targets)
-            all_predicted.extend(predicted)
+            all_targets.extend(targets.tolist())      
+            all_predicted.extend(predicted.tolist())  
 
     confusion_file = os.path.join(results_folder, "confusion_results.csv")
 
-    # Write header if file doesn't exist
-    if not os.path.exists(confusion_file):
-        with open(confusion_file, mode='w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['targets', 'predictions'])
-    
-    # Append results
+    write_header = not os.path.exists(confusion_file)
+
     with open(confusion_file, mode='a', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow([
-            str(all_targets), str(all_predicted),
-        ])
-
-    # Create confusion matrix
-    conf_matrix = confusion_matrix(all_targets, all_predicted)
-
-    plot_path = os.path.join(results_folder, "final_confusion_matrix.png")
-
-    plot_confusion_matrix(
-    cm=confusion_matrix, 
-    classes=class_names, 
-    normalize=False,
-    title='Confusion Matrix',
-    save_path=plot_path
-    )
-
-
+        if write_header:
+            writer.writerow(['target', 'prediction'])
+        writer.writerows(zip(all_targets, all_predicted))
