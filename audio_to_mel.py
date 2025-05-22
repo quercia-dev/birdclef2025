@@ -43,7 +43,7 @@ taxonomy_df = pd.read_csv(os.path.join(config.DATA_ROOT, 'taxonomy.csv'))
 species_class_map = dict(zip(taxonomy_df['primary_label'], taxonomy_df['class_name']))
 
 print("Loading training metadata...")
-train_df = pd.read_csv(os.path.join(config.DATA_ROOT, 'train.csv'))
+train_df = pd.read_csv(os.path.join(config.DATA_ROOT, 'train_soundscapes.csv'))
 
 
 label_list = sorted(train_df['primary_label'].unique())
@@ -52,10 +52,10 @@ label2id = dict(zip(label_list, label_id_list))
 id2label = dict(zip(label_id_list, label_list))
 
 print(f'Found {len(label_list)} unique species')
-working_df = train_df[['primary_label', 'rating', 'filename']].copy()
+working_df = train_df[['primary_label', 'filename']].copy()
 working_df['target'] = working_df.primary_label.map(label2id)
 working_df['filepath'] = working_df['filename'].apply(
-    lambda x: os.path.join(config.DATA_ROOT, 'train_audio', x)
+    lambda x: os.path.join(config.DATA_ROOT, 'train_soundscapes', x)
 )
 working_df['samplename'] = working_df.filename.map(lambda x: x.split('/')[0] + '-' + x.split('/')[-1].split('.')[0])
 working_df['class'] = working_df.primary_label.map(lambda x: species_class_map.get(x, 'Unknown'))
@@ -133,5 +133,5 @@ end_time = time.time()
 print(f"Processing completed in {end_time - start_time:.2f} seconds")
 print(f"Successfully processed {len(all_bird_data)} files out of {total_samples} total")
 print(f"Failed to process {len(errors)} files")
-output_filename = os.path.join(config.OUTPUT_DIR, "birdclef2025_melspec_5sec_256_256.npy")
+output_filename = os.path.join(config.OUTPUT_DIR, "birdclef2025_melspec_5sec_256_256_soundscapes.npy")
 np.save(output_filename, all_bird_data)
