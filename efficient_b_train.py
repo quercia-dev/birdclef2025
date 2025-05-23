@@ -49,7 +49,7 @@ class CFG:
     #submission_csv = 'data/sample_submission.csv'
     taxonomy_csv = 'data/taxonomy.csv'
 
-    spectrogram_npy = 'data/birdclef2025_melspec_5sec_256_256.npy'
+    spectrogram_npy = 'data/birdclef2025_melspec_5sec_256_256_soundscapes.npy'
 
     model_name = 'efficientnet_b0'  
     pretrained = True

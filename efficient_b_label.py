@@ -67,7 +67,7 @@ class CFG:
 
 # --- Hardcoded paths ---
 def main():
-    MODEL_PATH = "model/20250519_182132_efficientb0/model_fold0.pth"
+    MODEL_PATH = "model/20250521_124614_efficientb0/model_fold4.pth"
     SPECTROGRAM_NPY = "data/birdclef2025_melspec_5sec_256_256_soundscapes.npy"
     DATASET_CSV = "data/train_soundscapes.csv"
     TAXONOMY_CSV = "data/taxonomy.csv"

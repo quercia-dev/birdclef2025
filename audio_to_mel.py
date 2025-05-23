@@ -1,4 +1,4 @@
-import * from train_utils
+from train_utils import * 
 
 import os
 import cv2
