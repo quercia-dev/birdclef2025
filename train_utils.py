@@ -56,6 +56,8 @@ def audio2melspec(audio_data, cfg):
 
     return mel_spec_norm
 
+    
+
 
 def process_audio_file(audio_path, cfg):
     """Process a single audio file to get the mel spectrogram"""
@@ -89,6 +91,22 @@ def process_audio_file(audio_path, cfg):
     except Exception as e:
         print(f"Error processing {audio_path}: {e}")
         return None
+
+
+def process_audio_segment(audio_data, cfg):
+    """Process audio segment to get mel spectrogram"""
+    if len(audio_data) < cfg.FS * cfg.WINDOW_SIZE:
+        audio_data = np.pad(audio_data, 
+                          (0, cfg.FS * cfg.WINDOW_SIZE - len(audio_data)), 
+                          mode='constant')
+    
+    mel_spec = audio2melspec(audio_data, cfg)
+    
+    # Resize if needed
+    if mel_spec.shape != cfg.TARGET_SHAPE:
+        mel_spec = cv2.resize(mel_spec, cfg.TARGET_SHAPE, interpolation=cv2.INTER_LINEAR)
+        
+    return mel_spec.astype(np.float32)
 
 
 def generate_spectrograms(df, cfg):
@@ -378,3 +396,146 @@ def calculate_auc(targets, outputs):
             aucs.append(class_auc)
 
     return np.mean(aucs) if aucs else 0.0
+
+
+# INFERENCE HELPER FUNCTION 
+
+def find_model_files(cfg):
+    """
+    Find all .pth model files in the specified model directory
+    """
+    model_files = []
+    
+    model_dir = Path(cfg.model_path)
+    
+    for path in model_dir.glob('**/*.pth'):
+        model_files.append(str(path))
+    
+    return model_files
+
+def load_models(cfg, num_classes):
+    """
+    Load all found model files and prepare them for ensemble
+    """
+    models = []
+    
+    model_files = find_model_files(cfg)
+    
+    if not model_files:
+        print(f"Warning: No model files found under {cfg.model_path}!")
+        return models
+    
+    print(f"Found a total of {len(model_files)} model files.")
+    
+    if cfg.use_specific_folds:
+        filtered_files = []
+        for fold in cfg.folds:
+            fold_files = [f for f in model_files if f"fold{fold}" in f]
+            filtered_files.extend(fold_files)
+        model_files = filtered_files
+        print(f"Using {len(model_files)} model files for the specified folds ({cfg.folds}).")
+    
+    for model_path in model_files:
+        try:
+            print(f"Loading model: {model_path}")
+            checkpoint = torch.load(model_path, map_location=torch.device(cfg.device))
+            
+            model = BirdCLEFModel(cfg, num_classes)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model = model.to(cfg.device)
+            model.eval()
+            
+            models.append(model)
+        except Exception as e:
+            print(f"Error loading model {model_path}: {e}")
+    
+    return models
+
+def predict_on_spectrogram(audio_path, models, cfg, species_ids):
+    """Process a single audio file and predict species presence for each 5-second segment"""
+    predictions = []
+    row_ids = []
+    soundscape_id = Path(audio_path).stem
+    
+    try:
+        print(f"Processing {soundscape_id}")
+        audio_data, _ = librosa.load(audio_path, sr=cfg.FS)
+        
+        total_segments = int(len(audio_data) / (cfg.FS * cfg.WINDOW_SIZE))
+        
+        for segment_idx in range(total_segments):
+            start_sample = segment_idx * cfg.FS * cfg.WINDOW_SIZE
+            end_sample = start_sample + cfg.FS * cfg.WINDOW_SIZE
+            segment_audio = audio_data[start_sample:end_sample]
+            
+            end_time_sec = (segment_idx + 1) * cfg.WINDOW_SIZE
+            row_id = f"{soundscape_id}_{end_time_sec}"
+            row_ids.append(row_id)
+
+            if cfg.use_tta:
+                all_preds = []
+                
+                for tta_idx in range(cfg.tta_count):
+                    mel_spec = process_audio_segment(segment_audio, cfg)
+                    mel_spec = apply_tta(mel_spec, tta_idx)
+
+                    mel_spec = torch.tensor(mel_spec, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+                    mel_spec = mel_spec.to(cfg.device)
+
+                    if len(models) == 1:
+                        with torch.no_grad():
+                            outputs = models[0](mel_spec)
+                            probs = torch.sigmoid(outputs).cpu().numpy().squeeze()
+                            all_preds.append(probs)
+                    else:
+                        segment_preds = []
+                        for model in models:
+                            with torch.no_grad():
+                                outputs = model(mel_spec)
+                                probs = torch.sigmoid(outputs).cpu().numpy().squeeze()
+                                segment_preds.append(probs)
+                        
+                        avg_preds = np.mean(segment_preds, axis=0)
+                        all_preds.append(avg_preds)
+
+                final_preds = np.mean(all_preds, axis=0)
+            else:
+                mel_spec = process_audio_segment(segment_audio, cfg)
+                
+                mel_spec = torch.tensor(mel_spec, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+                mel_spec = mel_spec.to(cfg.device)
+                
+                if len(models) == 1:
+                    with torch.no_grad():
+                        outputs = models[0](mel_spec)
+                        final_preds = torch.sigmoid(outputs).cpu().numpy().squeeze()
+                else:
+                    segment_preds = []
+                    for model in models:
+                        with torch.no_grad():
+                            outputs = model(mel_spec)
+                            probs = torch.sigmoid(outputs).cpu().numpy().squeeze()
+                            segment_preds.append(probs)
+
+                    final_preds = np.mean(segment_preds, axis=0)
+                    
+            predictions.append(final_preds)
+            
+    except Exception as e:
+        print(f"Error processing {audio_path}: {e}")
+    
+    return row_ids, predictions
+
+def apply_tta(spec, tta_idx):
+    """Apply test-time augmentation"""
+    if tta_idx == 0:
+        # Original spectrogram
+        return spec
+    elif tta_idx == 1:
+        # Time shift (horizontal flip)
+        return np.flip(spec, axis=1)
+    elif tta_idx == 2:
+        # Frequency shift (vertical flip)
+        return np.flip(spec, axis=0)
+    else:
+        return spec

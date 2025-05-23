@@ -1,3 +1,5 @@
+import * from train_utils
+
 import os
 import cv2
 import math
@@ -63,28 +65,6 @@ total_samples = min(len(working_df), config.N_MAX or len(working_df))
 print(f'Total samples to process: {total_samples} out of {len(working_df)} available')
 print(f'Samples by class:')
 print(working_df['class'].value_counts())
-
-
-def audio2melspec(audio_data):
-    if np.isnan(audio_data).any():
-        mean_signal = np.nanmean(audio_data)
-        audio_data = np.nan_to_num(audio_data, nan=mean_signal)
-
-    mel_spec = librosa.feature.melspectrogram(
-        y=audio_data,
-        sr=config.FS,
-        n_fft=config.N_FFT,
-        hop_length=config.HOP_LENGTH,
-        n_mels=config.N_MELS,
-        fmin=config.FMIN,
-        fmax=config.FMAX,
-        power=2.0
-    )
-
-    mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-    mel_spec_norm = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min() + 1e-8)
-
-    return mel_spec_norm
 
 
 print("Starting audio processing...")
