@@ -121,15 +121,14 @@ def main():
                 inputs = batch["melspec"].to(device)
                 outputs = model(inputs)
                 preds = torch.argmax(outputs, dim=1).cpu().numpy()
-                ids = batch["id"]
-                results.extend(zip(ids, [class_names[p] for p in preds]))
+                results.extend([class_names[p] for p in preds])
             except Exception as e:
                 print(f"Error during prediction: {e}")
                 continue
     
     # Save predictions
     if results:
-        result_df = pd.DataFrame(results, columns=["samplename", "prediction"])
+        result_df = pd.DataFrame(results, columns=["prediction"])
         result_df.to_csv(OUTPUT_CSV, index=False)
         print(f"Saved predictions to {OUTPUT_CSV}")
     else:

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name="train"
+#SBATCH --job-name="inference"
 #SBATCH --account=3189081
 #SBATCH --partition=ai
 #SBATCH --mem=8G
