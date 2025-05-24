@@ -43,12 +43,12 @@ class CFG:
 
     OUTPUT_DIR = 'model/'
 
-    train_datadir = 'data/train_audio'
-    train_csv = 'data/train.csv'
-    #test_soundscapes = 'data/test_soundscapes'
-    #submission_csv = 'data/sample_submission.csv'
-    taxonomy_csv = 'data/taxonomy.csv'
+    train_datadir = 'data/train_soundscapes'
+    train_csv = 'data/train_soundscapes.csv'
 
+    taxonomy_csv = 'data/taxonomy.csv' 
+
+    #spectrogram_npy = 'data/birdclef2025_melspec_5sec_256_256_soundscapes.npy'
     spectrogram_npy = 'data/birdclef2025_melspec_5sec_256_256_soundscapes.npy'
 
     model_name = 'efficientnet_b0'  
@@ -84,6 +84,8 @@ class CFG:
 
     aug_prob = 0.5  
     mixup_alpha = 0.5  
+
+    pretrained_model_path = None
 
     def update_debug_settings(self):
         if self.debug:
@@ -392,6 +394,19 @@ def run_training(df, cfg):
         optimizer = get_optimizer(model, cfg)
         criterion = get_criterion(cfg)
 
+        # load pretrained model
+        if cfg.pretrained_model_path:
+            print(f"Loading pretrained model from: {cfg.pretrained_model_path}")
+            try:
+                checkpoint = torch.load(cfg.pretrained_model_path, map_location=cfg.device, weights_only=False)
+                model.load_state_dict(checkpoint['model_state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                if 'scheduler_state_dict' in checkpoint and checkpoint['scheduler_state_dict'] is not None:
+                    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                print("Pretrained model loaded successfully.")
+            except Exception as e:
+                print(f"Error loading pretrained model: {e}")
+
         if cfg.scheduler == 'OneCycleLR':
             scheduler = lr_scheduler.OneCycleLR(
                 optimizer,
@@ -497,13 +512,6 @@ if __name__ == "__main__":
     else:
         print("Will generate spectrograms on-the-fly during training")
 
-
-    train_len = int(0.9 * len(train_df))
-    val_len = len(train_df) - train_len
-
-    generator = torch.Generator().manual_seed(42)
-    train_set, val_set = random_split(train_df, [train_len, val_len], generator=generator)
-    
     # Store spectrograms reference before training
     if cfg.LOAD_DATA:
         try:
@@ -513,7 +521,23 @@ if __name__ == "__main__":
             print(f"Error loading pre-computed spectrograms: {e}")
     else:
         spectrograms = None
-    
+
+    cfg.pretrained_model_path = 'model/20250521_124614_efficientb0/model_fold4.pth'
+
+    # perform the 90-10 split only if not using a pretrained model
+    if not cfg.pretrained_model_path:
+        train_len = int(0.9 * len(train_df))
+        val_len = len(train_df) - train_len
+
+        generator = torch.Generator().manual_seed(42)
+        train_set, val_set = random_split(train_df, [train_len, val_len], generator=generator)
+    else:
+        train_set = train_df
+        val_set = train_df
+
+    train_len = int(0.9 * len(train_df))
+    val_len = len(train_df) - train_len    
+
     results_folder, best_model_path = run_training(train_set, cfg)
 
     print("\nTraining complete!")
