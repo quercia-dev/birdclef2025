@@ -1,12 +1,9 @@
 # Abstract
-Mobile and habitat-diverse animal species are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. However, conducting "on the ground" biodiversity surveys is costly and logistically demanding. As an alternative strategy, some conservation campaigns have therefore opted to perform passive acoustic monitoring (PAM); the use of autonomous recording units to record audio data in the field. Through modern machine learning techniques, these audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology directs a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides data to aid in the classification task: the samples from birdCLEF+ 2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we analyze the audio samples through dimensional reduction techniques, by reducing the audio samples to their Mel Spectrograms (Mel), exploring the dataset and the performance of a clustering algorithm for audio segmentation. We then tackle the classification task by first studying the performance of different architectures: we study variations of a Convolutional Neural Networks (CNN) architecture for their efficiency. Finally, we train a models using State of The Art heuristics to produce a best classifier. We submit our model to the official institution website.
+Mobile and habitat-diverse animal species are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. However, conducting "on the ground" biodiversity surveys is costly and logistically demanding. As an alternative strategy, some conservation campaigns have therefore opted to perform passive acoustic monitoring (PAM); the use of autonomous recording units to record audio data in the field. Through modern machine learning techniques, these audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology directs a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides data to aid in the classification task: the samples from birdCLEF 2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we compare the effectiveness of different model architectures, building a pipeline that reduces the audio samples to their Mel Spectrograms (Mel) and accurately classifies them. We proceed by first exploring the properties of the dataset and segmenting the audios with a clustering algorithm. We then tackle the classification task by first studying the performance of different architectures: we study variations of a Convolutional Neural Networks (CNN) architecture for their efficiency. Finally, we compare our results to a State of The Art model and we attempt to improve its performance through semi-supervised learning. We conclude by evaluating our methodology and model performance, and we submit our final model to the scoreboard.
 
-<!---
-actual techniques to be used will have to be updated as we go
--->
 
 # Description of the Task
-This project is a submission to the BirdCLEF2025 Kaggle competition hosted by the the Cornell Lab of Ornithology. In the description of the competition, the following goals are listed: 
+This project compares the performance of model architectures at the BirdCLEF2025 Kaggle competition, hosted by the the Cornell Lab of Ornithology. In the description of the competition, the following goals are listed: 
 (1) Identify species of different taxonomic groups in the Middle Magdalena Valley of Colombia/El Silencio Natural Reserve in soundscape data.
 
 (2) Train machine learning models with very limited amounts of training samples for rare and endangered species.
@@ -230,7 +227,7 @@ In this preliminary phase, we use Cross Entropy Loss and Accuracy as our indicat
 
 # Experiments with Models
 
-We build towards the task of soft classification using models of increasing complexity, before converging on a state-of-the-art solution, extended with data augmentation. 
+We build towards the task of soft classification using models of increasing complexity, before comparing the results with a state-of-the-art solution, which we extend with data augmentation. 
 
 It should be noted that the baseline accuracy of a model which was guessing randomly, given the distribution of the data $\text{P}_\text{correct} = 0.012$
 
@@ -311,7 +308,7 @@ A simple model like the MelCNN is not able to capture the full image of the data
 
 Given the limited amounts of data, overfitting is a real concern, which warrants the use of more sophisticated techniques to avoid it, notably Balanced Accuracy and Cross-Fold validation.
 
-# Comparison with EfficientNet B0
+# Comparison to EfficientNet B0
 
 In line with the our observations on the exploratory models, we address shortcomings and limitations by applying some key changes and producing a new model, which is more aligned with State-Of-The-Art solutions. 
 
@@ -325,15 +322,52 @@ We use both metrics because loss provides a continuous signal that reflects mode
 
 Finally, we use cross validation to reduce the risk of overfitting on the data during the training phase. This is also relevant in training the final, complete model on the whole dataset, as a 100-0 split would  lack a reliable accuracy metric to decide when to stop the training.
 
-### Results
+## Results
 
-Observing the evolution of loss, we observe a similar phenomenon as in the previous implementation of efficientNet: the model is slow to generalize, despite the advantages of the new configuration, together with the availability of the full training dataset.
+Observing the evolution of loss throughout training, we observe a similar phenomenon as in the previous implementation of efficientNet: the model is slow to generalize, despite the advantages of the new configuration, together with the availability of the full training dataset.
 
 ![](img/efficientb_loss_kfold.png)
 
-On a second note, validation accuracy falls within the previous results, though it is higher as a result of the enlarged training data.
+On a second note, validation accuracy falls within the previous results, though it is higher as a result of the enlarged training data. This can be attributed to K-fold cross-validation training on the whole dataset, as opposed to only 80% of it.
 
 ![](img/efficientb_acc_kfold.png.png)
+
+To account for the limitations of cross-validation, we also trained a model using the same regime for 90% of the dataset, validating at the end on 10% of the dataset. Plotting the confusion matrix, there is no clear 'bias' between taxonomy groups: the model performs uniformly over different labels.
+
+![](img/confusion_matrix_efficientb_train.png)
+
+For reference, the new model performed with 0.60 accuracy when using the whole train dataset (hash 596720). 
+
+## Semi-supervised learning
+
+Given the vast amounts of unlabelled audio recordings that are also present in the dataset, we attempt to use semi-supervised learning in improving the model: we first add labels the soundscape recordings using our best performing model, before continuing to train the model on these labels. We hope that the additional training may provide the model with more information on the distribution of the dataset, thus increasing model effectiveness.
+
+As an additional note, we also ran the "naive" efficientNet implementation, comparing the labelling of the two using a confusion matrix: we observe a high number of vertical and horizontal lines. This is consistent with our expectations: as the old model is biased and somewhat overfitting, we can identify in vertical lines labels that are clumped by the naive implementation but differentiated in the new model, and the opposite in the horizontal lines: uncertain labellings which belong to a single class according to the newer model, with successively poorer performance in later epochs.
+
+![](img/confusion_matrix_efficient_models.png)
+
+Plotting the training performance for the second stage of training, we observed coarser evolution, which could be attributed to overfitting. Moreover, through variations of the model, we noticed that the performance generally peaked in the second fold.
+
+![](img/semisuper_learning_val_acc.png)
+
+# Kaggle Scoreboard
+
+To compare the final performance of the models, we use Kaggle's hidden test feature. Unfortunately, none of the variations on the new model seemed to improve the performance much. We attribute this to the dataset, which has shown itself to be extremely unstable to changes both in training regime and in data augmentation.
+
+Accuracy with Kaggle hidden dataset
+- Baseline : 0.781
+- Data Augmentation in Misrepresented : 0.500
+- Additional Learning, Fold 1: 0.725
+- Additional Learning Misrepresented : 0.728
+- Additional Learning, Fold 4: 
+
+# Evaluation of Methodology
+
+
+
+# Conclusion
+
+
 
 # Sources
 
