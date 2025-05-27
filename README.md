@@ -1,9 +1,8 @@
 # Abstract
-Mobile and habitat-diverse animal species are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. Since conducting "on the ground" biodiversity surveys is costly and logistically demanding, conservation campaigns have opted for the use of autonomous recording units to record audio data in the field. Through modern machine learning techniques, these audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology directs a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides data to aid in the classification task: the samples from birdCLEF 2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we compared the effectiveness of different model architectures, building a pipeline that reduces the audio samples to their Mel Spectrograms (Mel) and classifies them. We proceed by first exploring the properties of the dataset and segmenting the audios with a clustering algorithm. We then tackle the classification task by first studying the performance of different architectures: we study variations of a Convolutional Neural Networks (CNN) architecture for their efficiency. Finally, we compare our results to a State of The Art model and we attempt to improve its performance through semi-supervised learning. We conclude by evaluating our methodology and model performance, and we submit our final model to the scoreboard.
-
+Mobile and habitat-diverse animal species are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. Since conducting "on the ground" biodiversity surveys is costly and logistically demanding, conservation campaigns have opted for the use of autonomous recording units to record audio data in the field. Through modern machine learning techniques, these audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology directs a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides data to aid in the classification task: the samples from birdCLEF 2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we compared the effectiveness of different model architectures, building a pipeline that reduces the audio samples to their Mel Spectrograms (Mel) and classifies them. We proceed by first exploring the properties of the dataset and segmenting the audios with a clustering algorithm. We then tackle the classification task by first studying the performance of different architectures: we study variations of a Convolutional Neural Network (CNN) architecture for their efficiency. Finally, we compare our results to a State of The Art model and we attempt to improve its performance through semi-supervised learning. We conclude by evaluating our methodology and model performance, and we submit our final model for evaluation on the competition scoreboard.
 
 # Description of the Task
-In this project we compared the performance of different architectures at the BirdCLEF2025 Kaggle competition, hosted by the the Cornell Lab of Ornithology. In the description of the competition, the following goals are listed: 
+In this project we compared the performance of different architectures at the BirdCLEF2025 Kaggle competition, hosted by the Cornell Lab of Ornithology. In the description of the competition, the following goals are listed: 
 
 (1) Identify species of different taxonomic groups in the Middle Magdalena Valley of Colombia/El Silencio Natural Reserve in soundscape data.
 
@@ -11,11 +10,11 @@ In this project we compared the performance of different architectures at the Bi
 
 (3) Enhance machine learning models with unlabeled data for improving detection/classification.
 
-In practice, the Lab supplies labeled audio clips for various animal species, along with a few unlabeled soundscapes that can be used for unsupervised learning. The final objective is to develop a model capable of analyzing these soundscapes and identifying the species present. Ultimately, the model will be tested on previously unseen soundscapes, where it must accurately detect and classify the species within.
+In practice, the Lab supplies labeled audio clips for various animal species, along with a few unlabeled Soundscapes that can be used for unsupervised learning. The final objective is to develop a model capable of analyzing these Soundscapes and identifying the species present. Ultimately, the model will be tested on previously unseen Soundscapes, where it must accurately detect and classify the species within.
 
 # Exploratory Data Analysis
 
-We began by exploring the structure of the data and its statistical properties, to inform our choice of classification models. The dataset was divided between labelled (training) and unlabelled (soundscapes) data. Audio files were `.ogg` audio files which contained metadata, and a labelling `.csv` table. In general, both labelled and unlabelled datasets were large, with labels ranging in quality, depending on their source.
+We began by exploring the structure of the data and its statistical properties, to inform our choice of classification models. The dataset was divided between labelled (training) and unlabelled (Soundscapes) data. Audio files were `.ogg` audio files which contained metadata, and a labelling `.csv` table. In general, both labelled and unlabelled datasets were large, with labels ranging in quality, depending on their source.
 
 ## Dataset Structure
 
@@ -60,7 +59,7 @@ Moreover, most secondary labels are empty. This is apparent in the following san
 
 ![](img/train_secondary_sand.png)
 
-Discarding the empty secondary label, we observed more closely the richness in variety: these are few secondary labels, always spread between different labels. 
+Discarding the empty secondary label, we observed more closely the richness in variety: these are few secondary labels, distributed among various primary labels. 
 
 ![](img/train_secondary_sand_nonempty.png)
 
@@ -83,7 +82,7 @@ A number of distinctive characteristics of the dataset and the final output of t
 
 ## Limitations on the final model
 
-As defined by the _Cornell Lab of Ornithology_, the final result of the study is be a classifier model, which is provided as a Kaggle Python Notebook, complying to the following restrictions:
+As defined by the _Cornell Lab of Ornithology_, the final result of the study is a classifier model, which is provided as a Kaggle Python Notebook, complying to the following restrictions:
 - If it is a CPU Notebook, it must run in less than 90 minutes.
 - GPU Notebook submissions are disabled. One can technically submit, though will have a strict limit of 1 minute of runtime.
 - Internet access is disabled
@@ -93,7 +92,7 @@ For the investigation, we did not include external data sources. Finally, the fi
 
 ## Difficulty with the data
 
-Some audio samples in the labelled dataset are spliced with human voices explaining the microphone setup. Moreover, some audios contained large proportions of static noise, with no relevant information in those cases.
+Some audio samples in the labelled dataset are spliced with human voices explaining the microphone setup. Moreover, some audio recordings contained large proportions of static noise, with no relevant information in those cases.
 
 The labelled recordings are characterized with an extreme degree of class imbalance in training data, with the least catalogued classes being composed of less than a minute samples in total. For instance, the following table shows the tail of the dataset classes, with the least represented labels.
 
@@ -112,9 +111,7 @@ The labelled recordings are characterized with an extreme degree of class imbala
 |       1564122 | 11 sec |
 ```
 
-In addition most recordings, are short, with few being considerably longer than the mean: 64% of recordings were shorter than 30 sec, with the mode being 5 sec when considering a 5 sec bin size. 
-
-Though the audio recordings were labelled by a reliable 'primary_label' feature, we also have access to a less reliable secondary labels. This motivated a consideration of different levels of trustworthiness for this secondary labels, which we explored through the use of an m parameter, obtaining a wide range of performance.
+Though the audio recordings were labelled by a reliable 'primary_label' feature, we also have access to a less reliable set of secondary labels. This motivated a consideration of different levels of trustworthiness for this secondary labels, which we explored through the use of an m parameter, obtaining a wide range of performance.
 
 Unlabelled recordings: almost half of the dataset is unlabelled, all with same length, which may give more information on the characteristics of audio data, but does not provide additional information through labelling.
 
@@ -134,7 +131,7 @@ Compared to raw spectrograms, Mel and MFCC representations were more compact and
 
 The final classification task involves identifying bird species present within a one-minute audio recording. To achieve this, we divide the recording into smaller segments and classify the species detected in each segment. We chose to split the audio into 5-second chunks. This means that our model will be trained on 5 second samples of the labelled data. Before training, all the labelled data was split into 5 second chunks. For recordings shorter than 5 seconds, we apply zero-padding. If there is a leftover segment of at least 2.5 seconds (e.g., an 8-second recording), we include both the first and last 5-second segments, aligning the remaining audio to the end.
 
-When training the early models, we noticed that computing the mel spectrograms of each recording was a major bottleneck: a cpu-intensive task that impeded training. As a natural result, we opted to save the mel transforms to file, caching only the transformed clips.
+When training the early models, we noticed that computing the mel spectrograms of each recording was a major bottleneck: a CPU-intensive task that impeded training. As a natural result, we opted to save the mel transforms to file, caching only the transformed clips.
 
 Since our first experiment of clustering the data to segment audio proved to be unsuccessful, we tried different methods of filtering the data.
 
@@ -156,7 +153,7 @@ In order to enforce wider cluster windows, we also experimented with different w
 
 We also attempted to perform clustering on MFCC coefficients, but we were not able to produce results even comparable to the mel ones: clusters would form around audio without discernible differences, as if the microphone would collect additional details, not relevant to the classification task. These results further discouraged us from using MFCC coefficients in our investigation.
 
-We experimented with K-means clustering, using the primary and secondary labels as a reference for the number of clusters, accounting for an extra cluster given by 'unlabelled'.
+We experimented with K-means clustering, using the primary and secondary labels as a reference for the number of clusters, including an additional cluster for 'unlabelled' samples.
 
 Overall, tweaking the cluster parameters was effective on a case by case basis, but the sensitivity to changes in the recording setup, especially across different origins for the data made it an ineffective tool for the segmentation of the whole dataset, especially considering the performance on unlabelled data. Clustering is not a viable approach for isolating the bird calls within full recordings, given its limited effectiveness and high sensitivity to recording variations. We moved to exploring alternative ways of extracting the animal calls, detailing our methods in the following sections.
 
@@ -181,7 +178,7 @@ Since rating-based filtering only affected a small portion of our dataset, and s
 - Created a secondary list of audio classes to remove: "Silence", "Noise", "Vehicle" (preserving data quantity).
 - Verified that this filtering preserved representation across almost all species.
 
-This two-stage approach allowed us to improve the quality of our data while maintaining the label diversity. The filtered dataset provides cleaner, more relevant audio segments for model training, which should improve classification performance. The standardized 5-second segments also better match our target application, where we'll analyze soundscapes using similar-length segments.
+This two-stage approach allowed us to improve the quality of our data while maintaining the label diversity. The filtered dataset provides cleaner, more relevant audio segments for model training, which should improve classification performance. The standardized 5-second segments also better match our target application, where we will analyze Soundscapes using similar-length segments.
 
 ![](img/primary_yamnet_filtering.png)
 
@@ -272,7 +269,7 @@ Overall, the best performance (validation accuracy = 0.4983) was achieved when u
 
 Finally, we found that very soft labels (m=0.7) combined with early stopping (after 6 out of 10 training epochs) led to a significant drop in both accuracy (down to 0.343) and balanced accuracy (0.304). This further highlights how sensitive the model is to supervision quality and training strategy.
 
-Moreover, to better understand the evolution of performance, we decided to plot the evolution of loss of efficientNet. 
+Moreover, to better understand the evolution of performance, we decided to plot the evolution of loss of EfficientNet. 
 
 ![](img/efficient_loss_accuracy_plot.png)
 
@@ -304,7 +301,7 @@ Finally, we used cross-validation to reduce the risk of overfitting on the data 
 
 ## Results
 
-Observing the evolution of loss throughout training, we noticed a similar phenomenon to the previous implementation of efficientNet: the model is slow to generalize, despite the advantages of the new configuration, and the availability of the full training dataset.
+Observing the evolution of loss throughout training, we noticed a similar phenomenon to the previous implementation of EfficientNet: the model is slow to generalize, despite the advantages of the new configuration, and the availability of the full training dataset.
 
 ![](img/efficientb_loss_kfold.png)
 
@@ -332,7 +329,7 @@ Plotting the training performance for the second stage of training, we observed 
 
 To compare the final performance of the models, we used Kaggle's hidden test feature. We had to proceed in this way because the full model was trained on the complete dataset, leaving no validation data.
 
-We tracked the effect of various training changes to accuracy: augmenting underrepresented classes, running Curriculum Learning with the soundscapes and taking different stages throughout the training phase of the model. We summarized these results in the following table (hash 6f4a47ac):
+We tracked the effect of various training changes to accuracy: augmenting underrepresented classes, running Curriculum Learning with the Soundscapes and taking different stages throughout the training phase of the model. We summarized these results in the following table (hash 6f4a47ac):
 
 ```
 | Soundscape | Fold | Augmentation      |       |
@@ -362,7 +359,7 @@ We tracked our efforts using custom time-tracking tools: the org-mode library in
 
 # Conclusion
 
-This study investigated machine learning approaches for automated species classification in the BirdCLEF 2025 challenge, evaluating how fundamental challenges of extreme class imbalance and limited labeled data influence ecological audio analysis, using data taken from Colombia's Middle Magdalena Valley. We relied on Mel spectrograms, and observed that clustering approaches are ineffective for audio segmentation, which we attributed to qualitative differences between recordings. We then studied the performance of a simple MelCNN architecture and a 'Naive' efficientNet B0 implementation, using loss, accuracy and balanced accuracy. Using an 80-20 train-test data split, we obtained an accuracy score of approximately 0.45, and balanced accuracy of 0.30. We also attempted to filter the data to obtain a refined dataset: we used Google's Yamnet classifier to produce labels of the samples, but were not able to obtain more than slightly better results. Instead, we observed a loss in performance when filtering the data in any way, despite preserving more than 80% of the samples and ensuring labels were preserved. We also attempted to employ secondary labels through soft labelling, but any model performed better with one-hot encoding. Finally, we compared our results with a publicly available EfficientNet B0 implementation, which substantially outperformed our custom MelCNN and naive EfficientNet architecture. The state-of-the-art solution achieving validation accuracy up to 0.498, using 90% of the training data with 5 k-folds, and a Kaggle hidden dataset score of 0.78. As a successive step, we implemented semi-supervised learning, adding pseudo-labels to the unlabelled soundscape data and continuing training of a model for a different number of times and data augmentation for underrepresented labels. Despite these efforts, we failed to improve performance beyond the baseline, with our best model achieving 0.781 accuracy on the Kaggle scoreboard. While we did not surpass state-of-the-art performance, this comprehensive analysis provides insights into the challenges of ecological audio classification and demonstrates that traditional techniques may not transfer effectively to highly imbalanced ecological datasets, suggesting future research should focus on few-shot learning and domain-specific methods tailored to biodiversity monitoring applications.
+This study investigated machine learning approaches for automated species classification in the BirdCLEF 2025 challenge, evaluating how fundamental challenges of extreme class imbalance and limited labeled data influence ecological audio analysis, using data taken from Colombia's Middle Magdalena Valley. We relied on Mel spectrograms, and observed that clustering approaches are ineffective for audio segmentation, which we attributed to qualitative differences between recordings. We then studied the performance of a simple MelCNN architecture and a 'Naive' EfficientNet B0 implementation, using loss, accuracy and balanced accuracy. Using an 80-20 train-test data split, we obtained an accuracy score of approximately 0.45, and balanced accuracy of 0.30. We also attempted to filter the data to obtain a refined dataset: we used Google's Yamnet classifier to produce labels of the samples, but we achieved only marginal improvements. Instead, we observed a loss in performance when filtering the data in any way, despite preserving more than 80% of the samples and ensuring labels were preserved. We also attempted to employ secondary labels through soft labelling, but any model performed better with one-hot encoding. Finally, we compared our results with a publicly available EfficientNet B0 implementation, which substantially outperformed our custom MelCNN and naive EfficientNet architecture. The state-of-the-art solution achieving validation accuracy up to 0.498, using 90% of the training data with 5 k-folds, and a Kaggle hidden dataset score of 0.78. As a successive step, we implemented semi-supervised learning, adding pseudo-labels to the unlabelled soundscape data and continuing training of a model for a different number of times and data augmentation for underrepresented labels. Despite these efforts, we failed to improve performance beyond the baseline, with our best model achieving 0.781 accuracy on the Kaggle scoreboard. While we did not surpass state-of-the-art performance, this comprehensive analysis provides insights into the challenges of ecological audio classification and demonstrates that traditional techniques may not transfer effectively to highly imbalanced ecological datasets, suggesting future research should focus on few-shot learning and domain-specific methods tailored to biodiversity monitoring applications.
 
 # Sources
 
