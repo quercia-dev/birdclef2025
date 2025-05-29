@@ -1,5 +1,5 @@
 # Abstract
-Mobile and habitat-diverse animal species are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. Since conducting "on the ground" biodiversity surveys is costly and logistically demanding, conservation campaigns have opted for the use of autonomous recording units to record audio data in the field. Through modern machine learning techniques, these audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology directs a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides data to aid in the classification task: the samples from birdCLEF 2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we compared the effectiveness of different model architectures, building a pipeline that reduces the audio samples to their Mel Spectrograms (Mel) and classifies them. We proceed by first exploring the properties of the dataset and segmenting the audios with a clustering algorithm. We then tackle the classification task by first studying the performance of different architectures: we study variations of a Convolutional Neural Network (CNN) architecture for their efficiency. Finally, we compare our results to a State of The Art model and we attempt to improve its performance through semi-supervised learning. We conclude by evaluating our methodology and model performance, and we submit our final model for evaluation on the competition scoreboard.
+Mobile and habitat-diverse animal species are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. Conducting "on the ground" biodiversity surveys is costly and logistically demanding, so conservation campaigns have opted for autonomous recording units to record audio data in the field. Through modern machine learning techniques, these audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology has directed a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides labeled data to aid in the classification task: the samples from birdCLEF 2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we compared the effectiveness of different model architectures, building a pipeline that reduces the audio samples to their Mel Spectrograms (Mel) and classifies them. We proceed by first exploring the properties of the dataset and segmenting the audios with a clustering algorithm. We then tackle the classification task by first studying the performance of different architectures: we study variations of a Convolutional Neural Network (CNN) architecture for their efficiency. Finally, we compare our results to a State of The Art model and we attempt to improve its performance through semi-supervised learning. We conclude by evaluating our methodology and model performance, and we submit our final model for evaluation on the competition scoreboard.
 
 # Description of the Task
 In this project we compared the performance of different architectures at the BirdCLEF2025 Kaggle competition, hosted by the Cornell Lab of Ornithology. In the description of the competition, the following goals are listed: 
@@ -10,17 +10,15 @@ In this project we compared the performance of different architectures at the Bi
 
 (3) Enhance machine learning models with unlabeled data for improving detection/classification.
 
-In practice, the Lab supplies labeled audio clips for various animal species, along with a few unlabeled Soundscapes that can be used for unsupervised learning. The final objective is to develop a model capable of analyzing these Soundscapes and identifying the species present. Ultimately, the model will be tested on previously unseen Soundscapes, where it must accurately detect and classify the species within.
+In practice, the Lab supplies labeled audio clips originating from three different collection of species audio: *iNaturalist*, *Xeno-Canto* and the *Colombian Sound Archive*. The audios contained various animal species, ranging from four different classes, Insecta, Amphibia, Mammalia, and Aves. In addition to this, a few unlabeled Soundscapes were also provided to be used for unsupervised learning. The final objective is to develop a model capable of analyzing unseen Soundscapes to accurately detect and classify the species within.
 
 # Exploratory Data Analysis
 
-We began by exploring the structure of the data and its statistical properties, to inform our choice of classification models. The dataset was divided between labelled (training) and unlabelled (Soundscapes) data. Audio files were `.ogg` audio files which contained metadata, and a labelling `.csv` table. In general, both labelled and unlabelled datasets were large, with labels ranging in quality, depending on their source.
+We began by exploring the structure of the data and its statistical properties, to inform our choice of classification models. The audio data consisted of `.ogg` files with metadata, alongside a labeling `.csv` file. The labelled trainig samples were placed in the `train_audio` folder, where each species had a dedicated subfolder named after ids ID, containing all corresponding audio clips. The soundscapes, were in the `train_soundscapes` folder and labeled by date and ID. Each soundscapes was exactly a minute long, while the samples had variable length. All audio files metrics had been normalized to fit the same range: 72 bitrate, 32000 sample rate, 1 channel and _vorbis_ as audio codec.
 
 ## Dataset Structure
 
-In the labelled data, the `training.csv` table provided key metrics on each recording, such as microphone type, recording location, main label, and some secondary additional labels which seemed present in the audio, though with lower reliability. The `taxonomy.csv` included information about all the species, linking their primary label to their iNaturalist taxonomy ID. It also contained their common and scientific names, as well as the animal class they belonged to.
-
-All recordings were in the `.ogg` audio file format. The samples had variable length and label quality, as they originated from different microphones.
+For the labelled data, the `train.csv` provided key metrics on each recording, such as the source, recording location, primary label, and some secondary additional labels of species heard in the audio, though with lower reliability. The `taxonomy.csv` included information about all the species, linking their primary label to their iNaturalist taxonomy ID. It also contained their common and scientific names, as well as the animal class they belonged to.
 
 
 ## Audio Durations
@@ -36,21 +34,15 @@ The _labelled_ dataset is composed of '28564' audio files, totalling '280' hours
 | Total Duration        | 280h     | 162.1 h    |
 ```
 
-It should be noted that although labelled data is larger in sum, there is (relatively) few usable samples, due to the vast number of labels and many  labelled audio clips containing just a few seconds of relevant sound, followed by the spoken description of the recording setup and specifications: a minute-long recording may provide as little as 5 seconds of relevant audio.
+It should be noted that although labelled data is larger in sum, there is (relatively) few usable samples, due to the vast number of labels and many labelled audio clips containing just a few seconds of relevant sound, followed by the spoken description of the recording setup and specifications: a minute-long recording may provide as little as 5 seconds of relevant audio.
 
 Although at that stage we could not infer what portion of the dataset was actually of use, we showed the histogram of duration, comparing frequency to audio duration. Notably, frequency had to be rescaled on a log scale, and although the vast majority of the audio samples were short (64% of recordings were shorter than 30 seconds), some outliers were present (25 and 29 minutes long).
 
 ![](img/training_duration_histogram.png)
 
-On the other hand, unlabelled data is straightforward: all audios are of 60s length.
-
-## File characteristics
-
-All audio files metrics, in both labelled and unlabelled datasets, had been normalized to fit the same range: 72 bitrate, 32000 sample rate, 1 channel and _vorbis_ as audio codec.
-
 ## Label Distribution
 
-The main labels of focus are 'primary' which is unique, 'secondary' which can either be empty or hold a list of other species heard in the recording. Finally, the 'type' column, if present, describes the type of bird call recorded.
+The main labels of focus are the 'primary' labels which are unique. All the clips also have a 'secondary' column which can either be empty or hold a list of other species heard in the recording. Finally, the 'type' column, if present, describes the type of bird call recorded.
 
 We consider the distribution of primary labels in the dataset: we immediately notice an inverse relation between label presence and label rank.
 ![](img/train_primary_histogram.png)
@@ -72,9 +64,10 @@ The final column of classification information, 'type', specifies a list of qual
 Our dataset consisted of audio recordings from three different sources: Xeno-Canto, iNaturalist, and the Colombian Sound Archive. We quickly identified several data quality challenges:
 
 - Inconsistent quality ratings across sources (only Xeno-Canto provided ratings)
-- Variable audio quality affecting model performance
-- Presence of silence, noise, and irrelevant sounds in recordings
+- Variability in  audio quality affecting model performance
+- Presence of silence, background noise, and irrelevant sounds in recordings
 - Risk of losing representation for rare species during filtering
+- Very large data imbalance
 
 # Challenges to Modelling
 
