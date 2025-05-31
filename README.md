@@ -131,28 +131,28 @@ When training the early models, we noticed that computing the mel spectrograms o
 
 Since labeled audios often included sources of external noise, which did not correspond to the labels, we were interested in removing the worst examples of training data to improve the quality of the dataset, in order to train a classifier model on only the best data. We approached this problem by first evaluating the performance of clustering algorithms.
 
-We proceeded by comparing the performance of different clustering algorithms on normalized Mel coefficients.
+We compared the performance of several clustering algorithms on normalized Mel coefficients.
 
-- _K-means_: the simplest conceptually, performed reasonably well, but it involved the added difficulty of setting the number of clusters beforehand.
+- _K-means_: the simplest conceptually, performed reasonably well, though it involved the added difficulty of setting the number of clusters beforehand.
 ![](img/train_spectrogram_12_kmeans.png)
-- _DBSCAN_: unlimited number of clusters, tweak epsilon and min size
+- _DBSCAN_: density-based method capable of automatically determining the number fo clusters, however, tweak epsilon and min size
 ![](img/train_spectrogram_12_dbscan.png)
 - _Agglomerative clustering_: we identified 'ward' as the best clustering rule. We attribute this to minimizing total variance within the cluster, preferring "self-contained" units.
 
 In order to enforce wider cluster windows, we also experimented with different ways to enforce continuity of the clusters in time: first encouraging time continuity by adding the time index to the data as an additional column, and second by experimenting with enforcing it as a hardcoded constraint. In both cases, we were unable to produce distinct results that could be usable for an initial filtering.
 
-We also attempted to perform clustering on MFCC coefficients, but we were not able to produce results even comparable to the mel ones: clusters would form around audio without discernible differences, as if the microphone would collect additional details, not relevant to the classification task. These results further discouraged us from using MFCC coefficients in our investigation.
+We also applied the same clustering pipeline to MFCC, but the results were inferior.Clusters formed around audio without discernible differences, likely caused by microphone or environmnetal artifacts, rather than meaningful acoustic differences. These results further discouraged us from using MFCC in our investigation.
 
-We experimented with K-means clustering, using the primary and secondary labels as a reference for the number of clusters, including an additional cluster for 'unlabeled' samples.
+Additionally, we tested K-means clustering, using the primary and secondary labels as a reference for the number of clusters, including an additional cluster for 'unlabeled' samples. While parameter tuning could yield reasonable clusters in individual cases, the method's performance degraded significantly across recordings with different background conditions or device setups.
 
-Overall, tweaking the cluster parameters was effective on a case by case basis, but the sensitivity to changes in the recording setup, especially across different origins for the data made it an ineffective tool for the segmentation of the whole dataset, especially considering the performance on unlabeled data. Clustering is not a viable approach for isolating the bird calls within full recordings, given its limited effectiveness and high sensitivity to recording variations. We moved to exploring alternative ways of extracting the animal calls, detailing our methods in the following sections.
+In conclusion, clustering methods were ineffective for isolating bird calls from raw audio, particularly in unlabeled data. Given their limited robustness and generalization, we moved to exploring alternative ways of extracting the animal calls, detailing our methods in the following sections.
 
 ## Rating-Based Filtering
 
 We first leveraged the rating system available in the Xeno-Canto dataset:
 
 - Analyzed the distribution of ratings, finding most clips rated above 3.5
-- Identified that filtering out low-rated samples would affect only 0.19% of the data
+- Identified that filtering out low-rated samples (< 3.5) would affect only 0.19% of the data
 - Found two species (Jaguar '41970' and Spotted Foam-nest Frog '126247') that would be lost if strictly filtered by rating
 - Implemented a preservation strategy by retaining the top 5 highest-rated examples of these at-risk species
 
@@ -160,27 +160,45 @@ This approach ensured we maintained representation across all 206 taxonomy label
 
 ## YAMNet Audio Classification
 
-Since rating-based filtering only affected a small portion of our dataset, and since we wanted to better navigate the variety of nature of the spliced audio clips, we identified Google's Yamnet pre-trained model for audio classification. It identifies the main category of sound in a clip out of a comprehensive list of 521 event classes. We set up the YAMNet filtering with the following steps:
+Since rating-based filtering only affected a small portion of our dataset, and since we wanted to better navigate the variety of nature of the spliced audio clips, we identified Google's YAMNet model, a pre-trained deep learning model for general-purpose audio classification based on the AudioSet dataset. YAMNet identifies the main category of sound in a clip out of a comprehensive list of 521 event classes, enabling us to automatically annotate and filter clips based on their primary acoustic content.
 
-- Split all recordings into standardized 5-second segments.
-- Used YAMNet to classify each segment with semantic labels (e.g., "Animal", "Bird", "Silence").
-- Created a curated list of 27 relevant audio classes to keep, including "Animal", "Wild animals", "Bird vocalization", "Frog", etc. (preserving data quality).
-- Created a secondary list of audio classes to remove: "Silence", "Noise", "Vehicle" (preserving data quantity).
-- Verified that this filtering preserved representation across almost all species.
+We applied YAMNet filtering with the following procedure:
+
+1. **Segmentation**: All recordings were split into the standardized t-second clips, aligning with the input format required for our downstream models
+2. **Classification**: Each segment was passed through YAMNet to obtain a predicted label from the 521 available event classes.
+3. **Curated "Keep" List**: We created a whitelist, "All", of 27 relevant audio classes, including such categories as "Bird", "Animal", and other ecologically meaningful sounds, to priotize *data quality*.
+4. **Curated "Remove" List**: We also created a list, "Light", to maintain *data quantity*, where a more lenient regime removed only the largest present, and most clearly irrelevant classes: "Silence", "Noise", "Vehicle".
+5. **Validation**: Verified that the filtering preserved broad species representation across the dataset.
 
 This two-stage approach allowed us to improve the quality of our data while maintaining the label diversity. The filtered dataset provides cleaner, more relevant audio segments for model training, which should improve classification performance. The standardized 5-second segments also better match our target application, where we will analyze Soundscapes using similar-length segments.
 
 ![](img/primary_yamnet_filtering.png)
 
-We considered two filtering regimes: 'All', which kept only the samples clearly identified as a variation of animal (eg. 'Animal', 'Bird', 'Snake', 'Insect', [...]) and 'Light', which was defined by excluding 'Silence', 'Noise' and 'Vehicle'. The filtered datasets retained most of the data: Light Filtering retained 83% of the samples and 'Animal' 67%, only losing 6 classes.
+The two filtering regimes, We considered two filtering regimes: 'All', a more rigorous filtering which only maintained relevant audio classes. This filtering resulted in 67% of the original data, and the loss of just 6 label classes. The second method, 'Light', that only excluded 'Silence', 'Noise' and 'Vehicle' retained retained 83% of the samples.
 
 ## Data Augmentation
 
-We experimented with data augmentation by employing the vast amounts of unlabeled data, in order to produce more data, especially for underrepresented data classes. We obtained new samples by starting from a labeled recording and interpolating its mel spectrogram with the that of a uniformly samples clip from the unlabeled data; the new label is computed as an interpolation of the labels of the two recordings.
+To improve generalization and robustness in our models, we applied multiple spectrogram augmentation techniques during training. We leveraged both labeled and unlabeled audio data to increase variability and mitigate class imbalance. The augmentations included:
+
+1. **SpecAugment-based Transfomations** 
+- *Time masking*: Random horizontal stripes (time axis) were zeroed to simulate occluded temporal segments.
+- *Frequency masking*: Random vertical stripes (frequency axis) were zeroes to simulate missing spectral bands.
+- *Random brightness and constrast adjustments*: Gain and bias varied to simulate different recording conditions, intensity clamped to a normalized [0, 1] range.
+
+2. **Mixup Augmentation**
+Input batches were augmented using the Mixup technique, where pairs of samples were linearly interpolated:
+- Spectrograms were combined as x̃ = λx₁ + (1 − λ)x₂ with λ sampled from a Beta distribution.
+- Targets were mixed proportionally to λ.
+- The loss function was adjusted accordingly to interpolate between the two labels.
+
+3. **Labeled-Unlabeled Interpolation**
+To exploit the large pool of unlabeled data, we generated synthetic training examples by interpolating the mel spectrogram of a labeled recording with that of a uniformly sampled unlabeled clip.
 
 ## Label Smoothing
 
-To take advantage of the information provided by the Secondary Labels, we included knowledge of the secondary labels by adding it to the probability of the training set, depending on parameter $m \in [0,1]$. We started from one-hot encoding of the primary label, taken as the basis vector $\mathbf{e}_m$, which we scaled by $m$, and to which we added the encoding vectors as the uniform probability of the secondary labels: $\frac{1-m}{\#\text{secondary labels}}$ for each possible secondary label.
+To take advantage of the information provided by the secondary labels, we modified the target label distribution used durin training. Specifically, we constructed soft target probability vectors by distributing label mass between the primary label and its associated secondary labels, controlled by a parameter $m \in [0,1]$.
+
+We started from one-hot encoding of the primary label, taken as the basis vector $\mathbf{e}_m$, which we scaled by $m$, and to which we added the encoding vectors as the uniform probability of the secondary labels: $\frac{1-m}{\#\text{secondary labels}}$ for each possible secondary label.
 
 We also included a 'null' label in the classifier, to account for lower confidence levels and deter 'hallucinations'. In data points without secondary labels, the leftover probability mass was placed in the 'null' label, to ensure the probability vector was consistent.
 
