@@ -202,12 +202,6 @@ We started from one-hot encoding of the primary label, taken as the basis vector
 
 We also included a 'null' label in the classifier, to account for lower confidence levels and deter 'hallucinations'. In data points without secondary labels, the leftover probability mass was placed in the 'null' label, to ensure the probability vector was consistent.
 
-## Validation
-
-The purpose of the model was to correctly classify 5-second audio samples among 206 possible classes. Although the final task only required a single class prediction per sample, we relaxed the problem by designing the model to output a full probability distribution across all classes. This allowed us to evaluate not just the top prediction, but also the confidence and structure of the model’s uncertainty. We tracked both the deviation from the true probability distribution and the correctness of the top predicted label, which was the one with the highest predicted probability.
-
-In this preliminary phase, we used Cross Entropy Loss and Accuracy as our indicators of error.
-
 # Modelling and Experiments
 
 We built towards the task of soft classification using models of increasing complexity, before comparing the results with a state-of-the-art solution, which we extended with data augmentation.
@@ -296,7 +290,7 @@ Plotting the training performance for the second stage of training, we observed 
 ![](img/semisuper_learning_val_acc.png)
 
 
-## Takeaways of the experiments
+## Takeaways from the Experiments
 
 Experimenting with different model architectures and validation methods, we tried to account for the imbalance in the training data, with varying degrees of success.
 
@@ -308,7 +302,7 @@ Given the limited amounts of data, overfitting was a real concern, which warrant
 
 # Results Analysis
 
-# Comparison to SOTA EfficientNet Implementation
+## Comparison to SOTA EfficientNet Implementation
 
 In line with our observations on the exploratory models, we addressed shortcomings and limitations by comparing the metrics of our implementation with those of a State-Of-The-Art solution.
 
