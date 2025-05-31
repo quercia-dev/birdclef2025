@@ -1,7 +1,9 @@
 # Abstract
 Mobile and habitat-diverse animal species are valuable indicators of biodiversity change, as shifts in their population dynamics can signal the success or failure of ecological restoration efforts. Conducting "on the ground" biodiversity surveys is costly and logistically demanding, so conservation campaigns have opted for autonomous recording units to record audio data in the field. Through modern machine learning techniques, these audio samples can be processed and analyzed to better understand the restoration effort's impact on local biodiversity. The Cornell Lab of Ornithology has directed a yearly challenge to develop computational methods to process the continuous audio data and identify species across different taxonomic groups. The Lab provides labeled data to aid in the classification task: the samples from birdCLEF 2025 were recorded in the Middle Magdalena Valley of Colombia, home to a diverse variety of under-studied species. The limited amount of labeled training data among the samples presents a significant challenge for species recognition. Moreover, any classifier model must fit within select computational constraints, defined by the Laboratory. In this study, we compared the effectiveness of different model architectures, building a pipeline that reduces the audio samples to their Mel Spectrograms (Mel) and classifies them. We proceed by first exploring the properties of the dataset and segmenting the audios with a clustering algorithm. We then tackle the classification task by first studying the performance of different architectures: we study variations of a Convolutional Neural Network (CNN) architecture for their efficiency. Finally, we compare our results to a State of The Art model and we attempt to improve its performance through semi-supervised learning. We conclude by evaluating our methodology and model performance, and we submit our final model for evaluation on the competition scoreboard.
 
-# Description of the Task
+# Introduction 
+
+## Description of the Task
 In this project we compared the performance of different architectures at the BirdCLEF2025 Kaggle competition, hosted by the Cornell Lab of Ornithology. In the description of the competition, the following goals are listed: 
 
 (1) Identify species of different taxonomic groups in the Middle Magdalena Valley of Colombia/El Silencio Natural Reserve in soundscape data.
@@ -11,6 +13,41 @@ In this project we compared the performance of different architectures at the Bi
 (3) Enhance machine learning models with unlabeled data for improving detection/classification.
 
 In practice, the Lab supplies labeled audio clips originating from three different collection of species audio: *iNaturalist*, *Xeno-Canto* and the *Colombian Sound Archive*. The audios contained various animal species, ranging from four different classes, Insecta, Amphibia, Mammalia, and Aves. In addition to this, a few unlabeled Soundscapes were also provided to be used for unsupervised learning. The final objective is to develop a model capable of analyzing unseen Soundscapes to accurately detect and classify the species within.
+
+## Limitations on the final model
+
+As defined by the _Cornell Lab of Ornithology_, the final result of the study is a classifier model, which is provided as a Kaggle Python Notebook, complying to the following restrictions:
+- If it is a CPU Notebook, it must run in less than 90 minutes.
+- GPU Notebook submissions are disabled. One can technically submit, though will have a strict limit of 1 minute of runtime.
+- Internet access is disabled
+- Freely & publicly available external data is allowed, which includes pre-trained models.
+
+For the investigation, we did not include external data sources. Finally, the final performance of the model is evaluated with 5-second-long samples. With this, we split samples into **5 sec** intervals and use model architectures that are hardcoded to this size.
+
+## Difficulty with the data
+
+Some audio samples in the labelled dataset are spliced with human voices explaining the microphone setup. Moreover, some audio recordings contained large proportions of static noise, with no relevant information in those cases.
+
+The labelled recordings are characterized with an extreme degree of class imbalance in training data, with the least catalogued classes being composed of less than a minute samples in total. For instance, the following table shows the tail of the dataset classes, with the least represented labels.
+
+```
+| primary_label | Tot    |
+|---------------+--------|
+|         81930 | 44 sec |
+|         67082 | 44 sec |
+|        548639 | 29 sec |
+|         66016 | 26 sec |
+|        523060 | 24 sec |
+|        868458 | 23 sec |
+|         42113 | 22 sec |
+|         42087 | 21 sec |
+|         21116 | 13 sec |
+|       1564122 | 11 sec |
+```
+
+Though the audio recordings were labelled by a reliable 'primary_label' feature, we also have access to a less reliable set of secondary labels. This motivated a consideration of different levels of trustworthiness for this secondary labels, which we explored through the use of an m parameter, obtaining a wide range of performance.
+
+Unlabelled recordings: almost half of the dataset is unlabelled, all with same length, which may give more information on the characteristics of audio data, but does not provide additional information through labelling.
 
 # Exploratory Data Analysis
 
@@ -69,46 +106,9 @@ Our dataset consisted of audio recordings from three different sources: Xeno-Can
 - Risk of losing representation for rare species during filtering
 - Very large data imbalance
 
-# Challenges to Modelling
-
-A number of distinctive characteristics of the dataset and the final output of the model limited our ability to use traditional training practices and model architectures. We first listed them in this section for completeness, before explaining the experiments that we ran, with the respective results.
-
-## Limitations on the final model
-
-As defined by the _Cornell Lab of Ornithology_, the final result of the study is a classifier model, which is provided as a Kaggle Python Notebook, complying to the following restrictions:
-- If it is a CPU Notebook, it must run in less than 90 minutes.
-- GPU Notebook submissions are disabled. One can technically submit, though will have a strict limit of 1 minute of runtime.
-- Internet access is disabled
-- Freely & publicly available external data is allowed, which includes pre-trained models.
-
-For the investigation, we did not include external data sources. Finally, the final performance of the model is evaluated with 5-second-long samples. With this, we split samples into **5 sec** intervals and use model architectures that are hardcoded to this size.
-
-## Difficulty with the data
-
-Some audio samples in the labelled dataset are spliced with human voices explaining the microphone setup. Moreover, some audio recordings contained large proportions of static noise, with no relevant information in those cases.
-
-The labelled recordings are characterized with an extreme degree of class imbalance in training data, with the least catalogued classes being composed of less than a minute samples in total. For instance, the following table shows the tail of the dataset classes, with the least represented labels.
-
-```
-| primary_label | Tot    |
-|---------------+--------|
-|         81930 | 44 sec |
-|         67082 | 44 sec |
-|        548639 | 29 sec |
-|         66016 | 26 sec |
-|        523060 | 24 sec |
-|        868458 | 23 sec |
-|         42113 | 22 sec |
-|         42087 | 21 sec |
-|         21116 | 13 sec |
-|       1564122 | 11 sec |
-```
-
-Though the audio recordings were labelled by a reliable 'primary_label' feature, we also have access to a less reliable set of secondary labels. This motivated a consideration of different levels of trustworthiness for this secondary labels, which we explored through the use of an m parameter, obtaining a wide range of performance.
-
-Unlabelled recordings: almost half of the dataset is unlabelled, all with same length, which may give more information on the characteristics of audio data, but does not provide additional information through labelling.
-
 # Audio Preprocessing
+
+A number of distinctive characteristics of the dataset and the final output of the model limited our ability to use traditional training practices and model architectures. ADD SOME DESCRIPTION HERE!
 
 To make the analysis more computationally tractable, we experimented with reducing the audio samples using Mel and MFCC coefficients.
 
@@ -193,7 +193,7 @@ The purpose of the model was to correctly classify 5-second audio samples among 
 
 In this preliminary phase, we used Cross Entropy Loss and Accuracy as our indicators of error.
 
-# Experiments with Models
+# Modelling and Experiments
 
 We built towards the task of soft classification using models of increasing complexity, before comparing the results with a state-of-the-art solution, which we extended with data augmentation.
 
@@ -201,7 +201,7 @@ It should be noted that the baseline accuracy of a model that was guessing rando
 
 We used an 80-20 train-test data split, tracking the validation Cross Entropy Loss and Accuracy metrics at the end of every epoch. For completeness, we showed the results for the EfficientNet architecture.
 
-# MelCNN
+## MelCNN
 
 As an initial experiment, we first studied the performance of a 'deep' CNN, with the following performance metrics: Cross Entropy Loss and Accuracy. We decided to restrict the input space to a simpler CNN architecture that used only the Mel Spectrogram. Compared to the more complex architectures tested later, MelCNN was trained for fewer epochs and without data augmentation or label smoothing. The models below explored different values for the label mixing factor $m$ and input filtering strategies.
 
@@ -268,6 +268,19 @@ Moreover, to better understand the evolution of performance, we decided to plot 
 
 We noticed that overfitting is a true concern training with this kind of data, especially considering that the model is of size much larger than the total number of training samples.
 
+## Semi-supervised Learning
+
+Given the vast amounts of unlabelled audio recordings that were also present in the dataset, we attempted to use semi-supervised learning to improve the model: we first added labels to the soundscape recordings using our best performing model, before continuing to train the model on the newly generated labels. We hoped that the additional training might provide the model with more information on the distribution of the dataset, potentially improving the model’s performance.
+
+As an additional note, we also ran the "naive" EfficientNet implementation, comparing the labelling of the two using a confusion matrix: we observed prominent vertical and horizontal streaks in the confusion matrix. This was consistent with our expectations: as the old model was biased and somewhat overfitted, we could identify in vertical lines labels that were clumped by the naive implementation but differentiated in the new model, and the opposite in the horizontal lines: uncertain labellings which belonged to a single class according to the newer model, with successively poorer performance in later epochs.
+
+![](img/confusion_matrix_efficient_models.png)
+
+Plotting the training performance for the second stage of training, we observed more 'spikey' accuracy, which could be attributed to overfitting. Moreover, through variations of the model, we noticed that the performance generally peaked in the second fold, taking different models.
+
+![](img/semisuper_learning_val_acc.png)
+
+
 ## Takeaways of the experiments
 
 Experimenting with different model architectures and validation methods, we tried to account for the imbalance in the training data, with varying degrees of success.
@@ -278,7 +291,9 @@ A simple model like the MelCNN was not able to capture the full image of the dat
 
 Given the limited amounts of data, overfitting was a real concern, which warranted the use of more sophisticated techniques to avoid it, notably Balanced Accuracy and Cross-Fold validation.
 
-# Comparison to EfficientNet B0
+# Results Analysis
+
+# Comparison to SOTA EfficientNet Implementation
 
 In line with our observations on the exploratory models, we addressed shortcomings and limitations by comparing the metrics of our implementation with those of a State-Of-The-Art solution.
 
@@ -306,19 +321,7 @@ To account for the limitations of cross-validation, we also trained a model usin
 
 ![](img/confusion_matrix_efficientb_train.png)
 
-## Semi-supervised learning
-
-Given the vast amounts of unlabelled audio recordings that were also present in the dataset, we attempted to use semi-supervised learning to improve the model: we first added labels to the soundscape recordings using our best performing model, before continuing to train the model on the newly generated labels. We hoped that the additional training might provide the model with more information on the distribution of the dataset, potentially improving the model’s performance.
-
-As an additional note, we also ran the "naive" EfficientNet implementation, comparing the labelling of the two using a confusion matrix: we observed prominent vertical and horizontal streaks in the confusion matrix. This was consistent with our expectations: as the old model was biased and somewhat overfitted, we could identify in vertical lines labels that were clumped by the naive implementation but differentiated in the new model, and the opposite in the horizontal lines: uncertain labellings which belonged to a single class according to the newer model, with successively poorer performance in later epochs.
-
-![](img/confusion_matrix_efficient_models.png)
-
-Plotting the training performance for the second stage of training, we observed more 'spikey' accuracy, which could be attributed to overfitting. Moreover, through variations of the model, we noticed that the performance generally peaked in the second fold, taking different models.
-
-![](img/semisuper_learning_val_acc.png)
-
-# Kaggle Scoreboard
+## Kaggle Scoreboard
 
 To compare the final performance of the models, we used Kaggle's hidden test feature. We had to proceed in this way because the full model was trained on the complete dataset, leaving no validation data.
 
