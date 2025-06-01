@@ -263,7 +263,7 @@ In the experiments, we noticed signs of overfitting: the model reached a trainin
 
 We also tested soft labeling by adjusting the label confidence to m=0.8. Interestingly, this slightly decreased performance, dropping the evaluation accuracy to 0.451. This indicates that, at least in our setup, soft labeling may hurt performance—potentially because it introduces uncertainty or emphasizes less confident predictions, which could confuse the model.
 
-To reduce noise in the dataset, we applied a filtering step using Light Yamnet, which resulted in a noticeable drop in accuracy compared to using the full dataset. This suggests that while filtering may reduce noise, it can also remove useful diversity that helps the model generalize better.
+To reduce noise in the dataset, we applied a filtering step using Light Yamnet, which resulted in a noticeable drop in accuracy compared to using the full dataset. Filtering may reduce noise, but at the cost of valuable signal diversity that helps the model generalize better.
 
 When we combined filtering with soft labeling, performance degraded even further. This aligns with the idea that soft supervision might not be effective when the dataset is already sparse or contains weak signals—adding uncertainty in such cases can be more harmful than helpful.
 
@@ -290,11 +290,11 @@ Plotting the training performance for the second stage of training, we observed 
 ![](img/semisuper_learning_val_acc.png)
 
 
-## Takeaways from the Experiments
+## Takeaways
 
 Experimenting with different model architectures and validation methods, we tried to account for the imbalance in the training data, with varying degrees of success.
 
-In our training experiments, we considered $\text{m}\in \{0.7, 0.8, 1.0\}$, but we always observed better results with $\text{m}=1$, that is, one-hot encoding.
+In our training experiments, we considered $\text{m}\in \{0.7, 0.8, 1.0\}$, yet we always observed better results with $\text{m}=1$, that is, one-hot encoding.
 
 A simple model like the MelCNN was not able to capture the full image of the data, which was particularly clear when observing the much higher accuracy score of the EfficientNet variation.
 
@@ -337,13 +337,13 @@ To compare the final performance of the models, we used Kaggle's hidden test fea
 We tracked the effect of various training changes to accuracy: augmenting underrepresented classes, running Curriculum Learning with the Soundscapes and taking different stages throughout the training phase of the model. We summarized these results in the following table (hash 6f4a47ac):
 
 ```
-| Soundscape | Fold | Augmentation      |       |
-|------------+------+-------------------+-------|
-| No         |    5 | No                | 0.781 |
-| No         |    5 | Yes               | 0.500 |
-| Yes        |    1 | Yes (soundscape)  | 0.728 |
-| Yes        |    1 | No                | 0.725 |
-| Yes        |    5 | No                | 0.717 |
+| Soundscape | Fold | Augmentation     | AUC   |
+|------------+------+------------------+-------|
+| No         |   5  | No               | 0.781 |
+| No         |   5  | Yes              | 0.500 |
+| Yes        |   1  | Yes (soundscape) | 0.728 |
+| Yes        |   1  | No               | 0.725 |
+| Yes        |   5  | No               | 0.717 |
 ```
 
 In general, we saw worse performance when augmenting underrepresented classes. This effect was particularly obvious when training on the original train dataset. Moreover, later folds of training on the soundscape dataset performed worse.
@@ -358,7 +358,7 @@ The code for the investigation was developed in Python, using a mix of Python sc
 
 Regarding hardware, we performed less intensive operations on our personal laptops, while training and other data-heavy tasks were automated using shell scripts submitted to the High Performance Cluster (HPC) available through our university, _Università Commerciale Luigi Bocconi_. We relied on shell utilities for most data transfers between our local devices and the HPC, referencing results by their Git commit hash for reproducibility.
 
-Initially, we experimented with different models and introduced flexible hyperparameter configurations to increase generality. Eventually we found ourselves developing two models (MelCNN and EfficientNet), while only being seriously interested in one of them, which consumed time that would have been better spent developing new models. In hindsight, a more solution-oriented, pragmatic approach, ie. keeping the code lighter and hardcoding more variables, would have been more effective. As a reference, framing the investigation as a hackathon, with following a "fail fast, fail often" mindset, could have accelerated our progress.
+Initially, we experimented with different models and introduced flexible hyperparameter configurations to increase generality. Eventually we found ourselves developing two models (MelCNN and EfficientNet), while only being seriously interested in one of them, which consumed time that would have been better spent developing new models. In hindsight, a more solution-oriented, pragmatic approach, ie. keeping the code lighter and hardcoding more variables, would have been more effective.
 
 We tracked our efforts using custom time-tracking tools: the org-mode library in Emacs and Clockwork, an independently developed productivity utility. The bulk of the project was completed in approximately 100 hours, tracked over 150 commits and spanning five to six weeks.
 
