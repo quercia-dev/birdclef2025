@@ -6,7 +6,7 @@
 \usepackage{cite}
 \usepackage{hyperref}
 \usepackage{geometry}
-\geometry{top=0.7in, bottom=0.7in, left=0.7in, right=0.7in}
+\geometry{top=0.6in, bottom=0.7in, left=0.7in, right=0.7in}
 
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.5em}
@@ -383,9 +383,7 @@ We were unsuccessful at improving the performance of the model beyond the state-
 
 \section*{Evaluation of Methodology}
 
-The code for the investigation was developed in Python, using a mix of Python scripts and Jupyter notebooks depending on our need for interactivity. For instance, model scripts were written as \texttt{.py} files, while exploratory graphs and one-time data operations were handled in interactive notebooks. Once specifc notebook code blocks reached maturity, we exported them to standalone scripts. Version control was managed using Git, with the repository hosted on GitHub. Overall, we were satisfied with this structure.
-
-We performed less intensive operations on our personal laptops, such as coding or test-running the models on a small batch of the data. On the other time, training and other data-heavy tasks were automated using shell scripts, which were submitted to the High Performance Cluster (HPC) available to us through our university, \textit{Università Commerciale Luigi Bocconi}\cite{unibocconi}. We relied on shell utilities for most data transfers between our local devices and the HPC, referencing results by their Git commit hash for reproducibility.
+The code for the investigation was developed using interactive Jupyter notebooks Python and a mix of depending on our need for interactivity. For instance, model scripts were written as \texttt{.py} files, while exploratory graphs and one-time data operations were handled in interactive notebooks. Version control was managed using Git, with the repository hosted on GitHub.  We performed less intensive operations on our personal laptops, such as coding or test-running the models on a small batch of the data. On the other time, training and other data-heavy tasks were automated using shell scripts, which were submitted to the High Performance Cluster (HPC) available to us through our university, \textit{Università Commerciale Luigi Bocconi}\cite{unibocconi}. We relied on shell utilities for most data transfers between our local devices and the HPC, referencing results by their Git commit hash for reproducibility.
 
 Initially, we experimented with different models and introduced flexible hyperparameter configurations to increase generality. Eventually we found ourselves developing two models (MelCNN and EfficientNet), while only being seriously interested in one of them, which consumed time that would have been better spent developing new models. In hindsight, a more solution-oriented, version history, ie. keeping the code lighter and hardcoding more variables, would have been more time efficient.
 
