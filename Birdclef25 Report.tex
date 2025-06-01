@@ -10,9 +10,9 @@
 
 \title{Comparative Investigation of CNN performance on birdCLEF 2025}
 \author{
-  Tommaso Ferracina\thanks{Università Commerciale Luigi Bocconi, tommaso.ferracina@studbocconi.it}
+  Tommaso Ferracina\
   \and
-  Tebe Nigrelli\thanks{Università Commerciale Luigi Bocconi, tebe.nigrelli@studbocconi.it}
+  Tebe Nigrelli
 }
 \date{\today}
 
@@ -161,11 +161,7 @@ On a final note, almost half of the dataset is unlabeled, which can be used to e
 
 \section*{Audio Preprocessing}
 
-To make the analysis computationally tractable, we experimented with transformations that transform raw audio into spectrogram representations. Two widely used methods for this are the \emph{Mel spectrogram} and the \emph{Mel-Frequency Cepstral Coefficients} (MFCCs).
-
-The Mel spectrogram applies a Mel filter bank to a \emph{short-time Fourier transform} (STFT), mapping frequencies to the Mel scale, defined in terms of perceived pitch and modeled after human auditory perception.
-
-In contrast, MFCCs are a compact representation derived by applying a  \emph{Discrete Cosine Transform} (DCT) to the log-Mel spectrogram. This process reduced dimensionality and emphasized the most informative features for tasks like speech and speaker recognition.
+To make the analysis computationally tractable, we experimented with transformations that transform raw audio into spectrogram representations. The most used method for this in deep learning is the \emph{Mel spectrogram}. The Mel spectrogram applies a Mel filter bank to a \emph{short-time Fourier transform} (STFT), mapping frequencies to the Mel scale, defined in terms of perceived pitch and modeled after human auditory perception.
 
 \begin{center}
   \includegraphics[width=0.7\linewidth]{img/scape_spectrogram.png}
@@ -181,29 +177,27 @@ When training the early models, we noticed that computing the mel spectrograms o
 
 \subsection*{Clustering for Audio Segmentation}
 
-Since labeled audios often include sources of external noise, which does not correspond to any relevant label, we were interested in removing the worst examples in the training data to improve the quality of the dataset. This transformation would produce a classifier model on only the best data.
+Since labeled audios often include sources of external noise, which does not correspond to any relevant label, we were interested in removing the worst examples in the training data to improve the quality of the dataset. This transformation would produce a classifier model on only the best data. We explored this direction by evaluating the performance of different clustering algorithms:
 
-We explored this direction by first evaluating the performance of different clustering algorithms on normalized Mel coefficients.
+\begin{minipage}{0.6\linewidth}
+\textit{K-means}: the simplest conceptually, performed reasonably well, though it involved the added difficulty of assigning the number of clusters beforehand.
+\end{minipage}
+\hfill
+\begin{minipage}{0.35\linewidth}
+  \includegraphics[width=\linewidth]{img/train_spectrogram_12_kmeans.png}
+\end{minipage}
 
-\begin{itemize}
-  \item \textit{K-means}: the simplest conceptually, performed reasonably well, though it involved the added difficulty of assigning the number of clusters beforehand.
-    \begin{center}
-      \includegraphics[width=0.5\linewidth]{img/train_spectrogram_12_kmeans.png}
-    \end{center}
+\vspace{1em}
 
-  \item \textit{DBSCAN}: a density-based method capable of automatically determining the number of clusters, however, tweak epsilon and min size
-    \begin{center}
-      \includegraphics[width=0.5\linewidth]{img/train_spectrogram_12_dbscan.png}
-    \end{center}
+\begin{minipage}{0.6\linewidth}
+\textit{DBSCAN}: a density-based method capable of automatically determining the number of clusters, however, tweak epsilon and min size.
+\end{minipage}
+\hfill
+\begin{minipage}{0.35\linewidth}
+  \includegraphics[width=\linewidth]{img/train_spectrogram_12_dbscan.png}
+\end{minipage}
 
-  \item \textit{Agglomerative clustering}: we identified 'ward' as the best clustering rule. We attributed this to minimizing total variance within the cluster, preferring "self-contained" units.
-\end{itemize}
-
-At a first glance, we noticed that clustering produced extremely thin and 'dispersed' groupings. In order to enforce wider windows, we also experimented with different ways to enforce continuity of the clusters in time: first encouraging time continuity by adding the time index to the data as an additional column, and second by experimenting with enforcing it as a hardcoded constraint. In both cases, we were unable to produce distinct results that could be usable for an initial filtering.
-
-We also applied the same clustering pipeline to MFCC, but the results were inferior. Clusters formed around audio without discernible differences, likely caused by microphone or environmnetal artifacts, rather than meaningful acoustic differences. These results further discouraged us from using MFCC in our investigation.
-
-Additionally, we tested K-means clustering, using the primary and secondary labels as a reference for the number of clusters, including an additional cluster for 'unlabeled' samples. While parameter tuning could yield reasonable clusters in individual cases, the method's performance degraded significantly across recordings with different background conditions or device setups.
+At a first glance, we noticed that clustering produced extremely thin and 'dispersed' groupings. In order to enforce wider windows, we also experimented with different ways to enforce continuity of the clusters in time: first encouraging time continuity by adding the time index to the data as an additional column, and second by experimenting with enforcing it as a hardcoded constraint. In both cases, we were unable to produce distinct results that could be usable for an initial filtering. Additionally, we tested K-means clustering, using the primary and secondary labels as a reference for the number of clusters, including an additional cluster for 'unlabeled' samples. While parameter tuning could yield reasonable clusters in individual cases, the method's performance degraded significantly across recordings with different background conditions or device setups.
 
 In all cases, we were unable to refine the clusters parameters to work over multiple audio files. As a resutl, we concluded that clustering methods are ineffective for isolating bird calls from raw audio, particularly in unlabeled data. Given their limited robustness and generalization, we moved to exploring alternative ways of extracting animal calls, detailing our methods in the following sections.
 
@@ -362,23 +356,21 @@ Overall, the best performance (val\_acc = 0.498) was achieved when using the ful
 
 Finally, we found that very soft labels (m=0.7) combined with early stopping (after 6 out of 10 training epochs) led to a significant drop in both accuracy (down to 0.343) and balanced accuracy (0.304). This further highlights how sensitive the model is to supervision quality and training strategy.
 
-As a final step, to better understand the evolution of performance, we decided to plot the evolution of loss of EfficientNet.
-
-\begin{center}
-  \includegraphics[width=0.8\linewidth]{img/efficient_loss_accuracy_plot.png}
-\end{center}
-
-We noticed that overfitting is a true concern training with this kind of data, especially considering that the model is of size much larger than the total number of training samples.
-
 \subsection*{Takeaways}
 
-Experimenting with different model architectures and validation methods, we tried to account for the imbalance in the training data, with varying degrees of success.
+\begin{minipage}{0.48\linewidth}
 
-In our training experiments, we considered $\text{m}\in \{0.7, 0.8, 1.0\}$, yet we always observed better results with $\text{m}=1$, that is, one-hot encoding.
+In our training experiments, we considered $\text{m} \in \{0.7, 0.8, 1.0\}$, yet we always observed better results with $\text{m} = 1$, that is, one-hot encoding.
 
 A simple model like the MelCNN was not able to capture the full image of the data, which was particularly clear when observing the much higher accuracy score of the EfficientNet variation.
 
 Given the limited amounts of data, overfitting was a real concern, warranting the use of more sophisticated techniques to avoid it, notably Balanced Accuracy and Cross-Fold validation.
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\linewidth}
+  \includegraphics[width=\linewidth]{img/efficient_loss_accuracy_plot.png}
+\end{minipage}
+
 
 \section*{Comparison to SOTA EfficientNet Implementation}
 
@@ -390,7 +382,7 @@ In line with our observations on the exploratory models, we addressed shortcomin
 Observing the evolution of loss throughout training, we noticed a similar phenomenon to the previous implementation of EfficientNet: the model is slow to generalize, despite the advantages of the new configuration, and the availability of the full training dataset.
 \end{minipage}
 \hfill
-\begin{minipage}{0.40\linewidth}
+\begin{minipage}{0.35\linewidth}
   \includegraphics[width=\linewidth]{img/efficientb_loss_kfold.png}
 \end{minipage}
 
@@ -400,7 +392,7 @@ Observing the evolution of loss throughout training, we noticed a similar phenom
 On a second note, validation accuracy fell within the previous results, though it was higher as a result of the enlarged training data. This could be attributed to K-fold cross-validation training on the whole dataset, as opposed to only 80\% of it.
 \end{minipage}
 \hfill
-\begin{minipage}{0.40\linewidth}
+\begin{minipage}{0.35\linewidth}
   \includegraphics[width=\linewidth]{img/efficientb_acc_kfold.png}
 \end{minipage}
 
@@ -408,7 +400,7 @@ On a second note, validation accuracy fell within the previous results, though i
 To account for the limitations of cross-validation, we also trained a model using the same regime for 90\% of the dataset, validating at the end on 10\% of the dataset. Plotting the confusion matrix, there is no clear 'bias' between taxonomy groups: the model performs uniformly over different labels. For reference, the new model performed with 0.78 accuracy when using the whole train dataset (hash 59672068). 
 \end{minipage}
 \hfill
-\begin{minipage}{0.40\linewidth}
+\begin{minipage}{0.35\linewidth}
   \includegraphics[width=\linewidth]{img/confusion_matrix_efficientb_train.png}
 \end{minipage}
 
@@ -470,6 +462,8 @@ We tracked our efforts using custom time-tracking tools: the org-mode library in
 
 \section*{Conclusion}
 This study investigated machine learning approaches for automated species classification in the BirdCLEF 2025 challenge, evaluating how fundamental challenges of extreme class imbalance and limited labeled data influence ecological audio analysis, using data taken from Colombia's Middle Magdalena Valley. We relied on Mel spectrograms, and observed that clustering approaches are ineffective for audio segmentation, which we attributed to qualitative differences between recordings. We then studied the performance of a simple MelCNN architecture and a 'Naive' EfficientNet B0 implementation, using loss, accuracy and balanced accuracy. Using an 80-20 train-test data split, we obtained an accuracy score of approximately 0.45, and balanced accuracy of 0.30. We also attempted to filter the data to obtain a refined dataset: we used Google's Yamnet classifier to produce labels of the samples, but we achieved only marginal improvements when filtering the data. Instead, we mostly a loss in performance when reducing the data in any way, despite preserving more than 80\% of the samples and guaranteeing label preservation. We also attempted to use secondary labels in training with soft labelling. However, all models performed better with one-hot encoding. Finally, we compared our results with a tweaked EfficientNet B0 implementation, which substantially outperformed our custom MelCNN and naive EfficientNet architecture. The state-of-the-art solution achieving validation accuracy up to 0.498, using 90\% of the training data with 5 k-folds, and a Kaggle hidden dataset score of 0.78. As a successive step, we implemented semi-supervised learning, adding pseudo-labels to the unlabeled soundscape data and continuing training of a model for a different number of times and data augmentation for underrepresented labels. Despite these efforts, we failed to improve performance beyond the baseline, with our best model achieving 0.781 accuracy on the Kaggle scoreboard. While we did not surpass state-of-the-art performance, this comprehensive analysis provides insights into the challenges of ecological audio classification and demonstrates that traditional techniques may not transfer effectively to highly imbalanced ecological datasets, suggesting future research should focus on few-shot learning and domain-specific methods tailored to biodiversity monitoring applications.
+
+\newpage
 
 \begin{thebibliography}{10}
 
