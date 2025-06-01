@@ -39,10 +39,6 @@ For the investigation, we did not include external data sources. Finally, the fi
 
 \section*{Exploratory Data Analysis}
 
-We began by exploring the structure and statistical properties of the data and its labels, to inform our choice of classification models. We also explored the data source and highlighted some inherent challenges.
-
-\section*{Dataset Structure}
-
 The audio data consists of \texttt{.ogg} files alongside metadata in a corresponding \texttt{.csv} file. The main source of species information is found in the \texttt{taxonomy.csv} file, where the primary label name is linked to the animals common name, scientific name, and the animal class they belong to.
 
 The labeled training samples are stored in the \texttt{train\_audio} folder, where each species has a dedicated subfolder named after its ID, containing all corresponding audio clips. This data is completely described by the \texttt{train.csv}, which provides key metrics on each recording, such as the source, recording location, primary label, and some secondary labels are present, which identify other species that may also be present in the audio, though with a lower reliability.
@@ -167,7 +163,7 @@ To make the analysis computationally tractable, we experimented with transformat
   \includegraphics[width=0.7\linewidth]{img/scape_spectrogram.png}
 \end{center}
 
-Compared to raw spectrograms, both Mel and MFCC representations reduce dimensionality and increase robustness to noise and variability. For the purposes of our investigation, we compared performance of models on both inputs types but found consistently better results with Mel spectrograms. Consequently, we chose the Mel spectrogram as our primary audio transformation for this study.
+Compared to raw spectrograms, the Mel representation reduces dimensionality and increases robustness to noise and variability. 
 
 \section*{Audio Splicing}
 
@@ -228,11 +224,14 @@ We applied YAMNet filtering with the following procedure:
   \item \textbf{Validation}: Verified that the filtering preserved broad species representation across the dataset.
 \end{enumerate}
 
+\begin{minipage}{0.48\linewidth}
 This two-stage approach allowed us to produce different refinements of the dataset with an improved quality in the data, while maintaining the label diversity. The remaining audio segments were cleaner and more relevant for model training. Consequently, we hoped that the step would improve classification performance.
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\linewidth}
+  \includegraphics[width=\linewidth]{img/primary_yamnet_filtering.png}
+\end{minipage}
 
-\begin{center}
-  \includegraphics[width=0.5\linewidth]{img/primary_yamnet_filtering.png}
-\end{center}
 
 \subsection*{Data Augmentation}
 
@@ -262,23 +261,11 @@ To improve generalization and robustness in our models, we applied multiple spec
 
 \subsection*{Label Smoothing}
 
-To take advantage of the information provided by the secondary labels, we modified the target label distribution used during training. Specifically, we constructed soft target probability vectors by distributing label mass between the primary label and its associated secondary labels, controlled by a parameter $m \in [0,1]$.
-
-We started from one-hot encoding of the primary label, taken as the basis vector $\mathbf{e}_m$, which we scaled by $m$, adding to it the encoding vectors as the uniform probability of the secondary labels: $\frac{1-m}{\#\text{secondary labels}}$ for each possible secondary label.
-
-We also included a 'null' label in the classifier, to account for lower confidence levels and allow the network to provide null labels. In data points without secondary labels, the leftover probability mass was placed in the 'null' label, to ensure the probability vector was consistent.
+To take advantage of the information provided by the secondary labels, we modified the target label distribution used during training. Specifically, we constructed soft target probability vectors by distributing label mass between the primary label and its associated secondary labels, controlled by a parameter $m \in [0,1]$. We started from one-hot encoding of the primary label, taken as the basis vector $\mathbf{e}_m$, which we scaled by $m$, adding to it the encoding vectors as the uniform probability of the secondary labels: $\frac{1-m}{\#\text{secondary labels}}$ for each possible secondary label. Finally, we included a 'null' label in the classifier, to account for lower confidence levels and allow the network to provide null labels. In data points without secondary labels, the leftover probability mass was placed in the 'null' label, to ensure the probability vector was consistent.
 
 \section*{Modelling and Experiments}
 
-We built towards the task of soft classification using models of increasing complexity, before comparing the results with a state-of-the-art solution, which we extended with data augmentation.
-
-It should be noted that the baseline accuracy of a model guessing randomly, given the distribution of the data, is $\text{P}_\text{correct} = 0.012$.
-
-At this stage of the investigation, we used an 80-20 train-test data split, tracking validation Cross Entropy Loss and Accuracy metrics at the end of every epoch.
-
-Loss quantifies how close the predicted probability vector is to the target distribution, usually a one-hot vector for classification tasks. A lower loss indicates that the model’s predicted probabilities are better aligned with the true labels. Accuracy, on the other hand, measures how often the class with the highest predicted probability matches the actual label.
-
-We used both Loss and Accuracy because loss provided a continuous signal that reflected model confidence and could guide training, even when predictions were incorrect. Accuracy, in contrast, is less informative and only measures the final performance.
+We built towards the task of soft classification using models of increasing complexity, before comparing the results with a state-of-the-art solution, which we extended with data augmentation. It should be noted that the baseline accuracy of a model guessing randomly, given the distribution of the data, is $\text{P}_\text{correct} = 0.012$. At this stage of the investigation, we used an 80-20 train-test data split, tracking validation Cross Entropy Loss and Accuracy metrics at the end of every epoch. We used both Loss and Accuracy because loss provided a continuous signal that reflected model confidence and could guide training, even when predictions were incorrect. Accuracy, in contrast, is less informative and only measures the final performance.
 
 \subsection*{MelCNN}
 
@@ -288,24 +275,24 @@ Performance across configurations varied, but remained poor, with all accuracies
 
 Finally, "Animal" filtering generally performed better than "All" despite fewer training samples, likely due to cleaner or more consistent labelling.
 
-\begin{table}[h!]
-  \centering
-  \begin{tabular}{|l|r|r|r|l|}
-    \hline
-    Data  & Epochs & Encoding & Accuracy & Hash     \\
-    \hline
-    All    & 10     & 1.0      & 0.0298   & c580a9c1 \\
-    All    & 3      & 1.0      & 0.0261   & c580a9c1 \\
-    Light  & 3      & 1.0      & 0.0397   & c580a9c1 \\
-    All    & 3      & 1.0      & 0.0261   & 5a6176d1 \\
-    Light  & 3      & 0.8      & 0.0402   & 5a6176d1 \\
-    \hline
-  \end{tabular}
-  \label{tab:results}
-\end{table}
-
+\begin{minipage}{0.48\linewidth}
 Empirically, we eventually opted to stop training after 3 epochs, as we saw little improvements in performance after, which we attributed to limited model capacity. After seeing the poor results of this preliminary architecture, we decided to consider a more complex model, trained for a longer time, in order to improve generalization and achieve higher accuracies.
-
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\linewidth}
+\centering
+\begin{tabular}{|l|r|r|r|l|}
+\hline
+Data  & Epochs & Encoding & Accuracy & Hash     \\
+\hline
+All    & 10     & 1.0      & 0.0298   & c580a9c1 \\
+All    & 3      & 1.0      & 0.0261   & c580a9c1 \\
+Light  & 3      & 1.0      & 0.0397   & c580a9c1 \\
+All    & 3      & 1.0      & 0.0261   & 5a6176d1 \\
+Light  & 3      & 0.8      & 0.0402   & 5a6176d1 \\
+\hline
+\end{tabular}
+\end{minipage}
 \subsection*{EfficientNet}
 
 After our limited successes in training models from scratch, we opted to try a different approach: applying \emph{transfer learning} and filtering the datasets as little as possible.
@@ -344,17 +331,7 @@ Small gap between All and Light datasets suggested that both contain enough lear
   \label{tab:balanced_accuracy}
 \end{table}
 
-Through the experiments, we noticed clear signs of overfitting: the model reached a training accuracy of about 0.77, but its evaluation accuracy on the same dataset (with hard labels, m=1.0) was significantly lower at 0.476. This gap suggests the model may learn patterns that don't generalize well, even on familiar data.
-
-We also tested soft labeling by adjusting the label confidence to $m=0.8$, which slightly decreased performance, by producing an evaluation accuracy of 0.451. Once more, we observed that in the setup, soft labeling hurts performance—potentially, as it introduces uncertainty or emphasizes less confident predictions, which confuses the model.
-
-To reduce noise in the dataset, we applied a filtering step using Light Yamnet, which resulted in a noticeable drop in accuracy compared to using the full dataset. Filtering may have reduced noise, albeit at the cost of losing signal diversity, necessary for the model to generalize better.
-
-When we combined filtering with soft labeling, performance degraded even further. This aligns with the idea that soft supervision might not be effective when the dataset is already sparse or contains weak signals. Adding uncertainty in such cases can be more harmful than helpful.
-
-Overall, the best performance (val\_acc = 0.498) was achieved when using the full dataset with hard labels (m=1.0). This supported the conclusion that, for our setup, full supervision with confident labels is the most effective approach.
-
-Finally, we found that very soft labels (m=0.7) combined with early stopping (after 6 out of 10 training epochs) led to a significant drop in both accuracy (down to 0.343) and balanced accuracy (0.304). This further highlights how sensitive the model is to supervision quality and training strategy.
+Through the experiments, we noticed clear signs of overfitting: the model reached a training accuracy of about 0.77, but its evaluation accuracy on the same dataset (with hard labels, m=1.0) was significantly lower at 0.476. This gap suggests the model may learn patterns that don't generalize well, even on familiar data. We also tested soft labeling by adjusting the label confidence to $m=0.8$, which slightly decreased performance, by producing an evaluation accuracy of 0.451. Once more, we observed that in the setup, soft labeling hurts performance, potentially, as it introduces uncertainty or emphasizes less confident predictions, which confuses the model. To reduce noise in the dataset, we applied a filtering step using Light Yamnet, which resulted in a noticeable drop in accuracy compared to using the full dataset. Filtering may have reduced noise, albeit at the cost of losing signal diversity, necessary for the model to generalize better. When we combined filtering with soft labeling, performance degraded even further. This aligns with the idea that soft supervision might not be effective when the dataset is already sparse or contains weak signals. Adding uncertainty in such cases can be more harmful than helpful. Overall, the best performance (val\_acc = 0.498) was achieved when using the full dataset with hard labels (m=1.0). This supported the conclusion that, for our setup, full supervision with confident labels is the most effective approach. Finally, we found that very soft labels (m=0.7) combined with early stopping (after 6 out of 10 training epochs) led to a significant drop in both accuracy (down to 0.343) and balanced accuracy (0.304). This further highlights how sensitive the model is to supervision quality and training strategy.
 
 \subsection*{Takeaways}
 
@@ -378,7 +355,7 @@ In line with our observations on the exploratory models, we addressed shortcomin
 
 \subsection*{Results}
 
-\begin{minipage}{0.55\linewidth}
+\begin{minipage}{0.60\linewidth}
 Observing the evolution of loss throughout training, we noticed a similar phenomenon to the previous implementation of EfficientNet: the model is slow to generalize, despite the advantages of the new configuration, and the availability of the full training dataset.
 \end{minipage}
 \hfill
@@ -388,7 +365,7 @@ Observing the evolution of loss throughout training, we noticed a similar phenom
 
 \vspace{1em}
 
-\begin{minipage}{0.55\linewidth}
+\begin{minipage}{0.6\linewidth}
 On a second note, validation accuracy fell within the previous results, though it was higher as a result of the enlarged training data. This could be attributed to K-fold cross-validation training on the whole dataset, as opposed to only 80\% of it.
 \end{minipage}
 \hfill
@@ -396,7 +373,7 @@ On a second note, validation accuracy fell within the previous results, though i
   \includegraphics[width=\linewidth]{img/efficientb_acc_kfold.png}
 \end{minipage}
 
-\begin{minipage}{0.55\linewidth}
+\begin{minipage}{0.6\linewidth}
 To account for the limitations of cross-validation, we also trained a model using the same regime for 90\% of the dataset, validating at the end on 10\% of the dataset. Plotting the confusion matrix, there is no clear 'bias' between taxonomy groups: the model performs uniformly over different labels. For reference, the new model performed with 0.78 accuracy when using the whole train dataset (hash 59672068). 
 \end{minipage}
 \hfill
@@ -407,21 +384,21 @@ To account for the limitations of cross-validation, we also trained a model usin
 \section*{Semi-supervised Learning}
 Given the vast amounts of unlabeled audio recordings that were also present in the dataset, we attempted to use semi-supervised learning to improve the model: we first added labels to the soundscape recordings using our best performing model, before continuing to train the model on the newly generated labels. We hoped that the additional training might provide the model with more information on the distribution of the dataset, potentially improving its performance.
 
-\begin{minipage}{0.55\linewidth}
+\begin{minipage}{0.65\linewidth}
 As an additional note, we also ran the "naive" EfficientNet implementation, comparing the labelling of the two with the help of a confusion matrix. We observed prominent vertical and horizontal streaks in the plot, which is consistent with the expectations: as the old model was biased and somewhat overfitted, we could identify in vertical lines labels that were clumped by the naive implementation but differentiated in the new model, and the opposite in the horizontal lines: uncertain labellings which belonged to a single class according to the newer model.
 \end{minipage}
 \hfill
-\begin{minipage}{0.35\linewidth}
+\begin{minipage}{0.30\linewidth}
   \includegraphics[width=\linewidth]{img/confusion_matrix_efficient_models.png}
 \end{minipage}
 
 \vspace{1em}
 
-\begin{minipage}{0.55\linewidth}
+\begin{minipage}{0.65\linewidth}
 Plotting the training performance for the second stage of training, we observed more 'spikey' accuracy, which could be attributed to overfitting. Moreover, through variations of the model, we noticed that the performance generally peaked in the second fold, taking different models.
 \end{minipage}
 \hfill
-\begin{minipage}{0.35\linewidth}
+\begin{minipage}{0.30\linewidth}
   \includegraphics[width=\linewidth]{img/semisuper_learning_val_acc.png}
 \end{minipage}
 
@@ -448,7 +425,7 @@ Yes        & 5    & No               & 0.717 \\
 \end{tabular}
 \end{minipage}
 
-Unfortunately, we were unsuccessful in improving the performance of the model beyond the baseline state-of-the-art model. None of the variations on the new model improved the performance. We attribute this to the dataset, which has shown itself to be extremely sensitive to changes both in training regime and in data augmentation.
+We were unsuccessful at improving the performance of the model beyond the state-of-the-art model: no variation on the new model improved the performance. We attribute this to the dataset, which has shown itself to be sensitive to changes both in training and data.
 
 \section*{Evaluation of Methodology}
 
