@@ -8,7 +8,10 @@
 \usepackage{geometry}
 \geometry{margin=1in}
 
-\title{Comparative Investigation of CNN performance on birdCLEF 2025}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+\title{Evaluating CNN performance on birdCLEF 2025}
 \author{
   Tommaso Ferracina\
   \and
@@ -16,8 +19,6 @@
 }
 \date{\today}
 
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{0.5em}
 
 \begin{document}
 
@@ -29,13 +30,7 @@
 
 \section*{Description of the Task}
 
-In this investigation, we compared the performance of different architectures for the BirdCLEF2025 Kaggle competition, hosted by the Cornell Lab of Ornithology. The Lab supplies labeled audio clips originating from three different collection of species audio: \textit{iNaturalist}, \textit{Xeno-Canto} and the \textit{Colombian Sound Archive}. The audios contain various animal species, ranging from four different taxonomy classes: Insecta, Amphibia, Mammalia, and Aves. In addition to this, unlabeled Soundscapes are also provided to be used for unsupervised learning. The final objective is to develop a model capable of analyzing unseen Soundscapes to accurately detect and classify the species within.
-
-\section*{Limitations on the Final Model}
-
-As defined by the \textit{Cornell Lab of Ornithology}, the final result of the study is a classifier model, in the format of a Jupyter Notebook that complies with the following restrictions: the Notebook must use only CPU, running in less than 90 minutes, Internet access must be disabled and external data is allowed, which includes pre-trained models.
-
-For the investigation, we did not include external data sources. Finally, the final performance of the model is evaluated with 5-second-long samples. With this, we split samples into \textbf{5 sec} intervals and use model architectures that are hardcoded to this size.
+In this investigation, we compared the performance of different architectures for the BirdCLEF2025 Kaggle competition \cite{birdclef2025}, hosted by the Cornell Lab of Ornithology. The Lab supplies labeled audio clips originating from three different collection of species audio: \textit{iNaturalist}, \textit{Xeno-Canto} and the \textit{Colombian Sound Archive}. The audios contain various animal species, ranging from four different taxonomy classes: Insecta, Amphibia, Mammalia, and Aves. In addition to this, unlabeled Soundscapes are also provided to be used for unsupervised learning. The final objective is to develop a model capable of analyzing unseen Soundscapes to accurately detect and classify the species within.
 
 \section*{Exploratory Data Analysis}
 
@@ -115,15 +110,7 @@ The final column of classification information, \texttt{type}, specifies a list 
 
 \section*{Data Sources}
 
-The dataset consists of audio recordings from three different sources: Xeno-Canto, a global bird sound repository; iNaturalist, a citizen science platform with diverse wildlife recordings; and the Colombian Sound Archive, a national collection preserving Colombia's acoustic biodiversity. These sources vary in their level of scientific rigor, as some are curated by experts, while others are maintained by hobbyists. Due to this, we quickly identified several data quality challenges:
-
-\begin{itemize}
-  \item Inconsistent availability of quality ratings across sources (only Xeno-Canto provided ratings).
-  \item High variability in audio quality, affecting model performance.
-  \item Frequent presence of silence, background noise, and irrelevant sounds in recordings.
-  \item Risk of losing representation for rare species during data cleaning or filtering.
-  \item Severe class imbalance.
-\end{itemize}
+The dataset consists of audio recordings from three different sources: Xeno-Canto, a global bird sound repository; iNaturalist, a citizen science platform with diverse wildlife recordings; and the Colombian Sound Archive, a national collection preserving Colombia's acoustic biodiversity. These sources vary in their level of scientific rigor, as some are curated by experts, while others are maintained by hobbyists. Due to this, we quickly identified several data quality challenges. For example, there is inconsistent availability of quality ratings across sources, with only Xeno-Canto providing such ratings. Moreover, a high variability in audio quality affects model performance, since recordings often contain silence, background noise, and other irrelevant sounds. There is also a risk of losing representation for rare species during data cleaning or filtering, compounded by a severe class imbalance.
 
 \section*{Challenges with the Data}
 
@@ -157,26 +144,23 @@ On a final note, almost half of the dataset is unlabeled, which can be used to e
 
 \section*{Audio Preprocessing}
 
-To make the analysis computationally tractable, we experimented with transformations that transform raw audio into spectrogram representations. The most used method for this in deep learning is the \emph{Mel spectrogram}. The Mel spectrogram applies a Mel filter bank to a \emph{short-time Fourier transform} (STFT), mapping frequencies to the Mel scale, defined in terms of perceived pitch and modeled after human auditory perception.
+To make the analysis computationally tractable, we experimented with transformations that transform raw audio into spectrogram representations. The most used method for this in deep learning is the \emph{Mel spectrogram}\cite{mel_cepstrum}. The Mel spectrogram applies a Mel filter bank to a \emph{short-time Fourier transform} (STFT), mapping frequencies to the Mel scale, defined in terms of perceived pitch and modeled after human auditory perception. Compared to raw spectrograms, the Mel representation reduces dimensionality and increases robustness to noise and variability. 
+
 
 \begin{center}
   \includegraphics[width=0.7\linewidth]{img/scape_spectrogram.png}
 \end{center}
 
-Compared to raw spectrograms, the Mel representation reduces dimensionality and increases robustness to noise and variability. 
-
 \section*{Audio Splicing}
 
 The final classification task involves identifying bird species present within a one-minute audio recording. To achieve this, we divided the recording into smaller segments, classifying the species detected in each segment. We chose a 5-second window size, meaning our model is trained on 5-second chunks of labeled data. All the recordings in the dataset were preprocessed accordingly: audios longer than 5 seconds were split into multiple segments, while recordings shorter than 5 were zero-padded. In cases of a leftover segment of at least 2.5 seconds (e.g., an 8-second recording), we included both the first and last 5-second segments, aligning the remaining audio to the end.
-
-When training the early models, we noticed that computing the mel spectrograms of each recording on-the-fly was a major bottleneck: a CPU-intensive task that impeded training. To address this, we precomputed and cached the Mel spectrograms to disk, significantly accelerating training by avoiding repeated transformations that would produce the same results.
 
 \subsection*{Clustering for Audio Segmentation}
 
 Since labeled audios often include sources of external noise, which does not correspond to any relevant label, we were interested in removing the worst examples in the training data to improve the quality of the dataset. This transformation would produce a classifier model on only the best data. We explored this direction by evaluating the performance of different clustering algorithms:
 
 \begin{minipage}{0.6\linewidth}
-\textit{K-means}: the simplest conceptually, performed reasonably well, though it involved the added difficulty of assigning the number of clusters beforehand.
+\textit{K-means}: the simplest conceptually, performed reasonably well, though it involved the added difficulty of assigning the number of clusters beforehand. Despite using the number of primary and secondary labels, together with a 'null' label as a reference for the number of clusters, we were not able to improve the grouping.
 \end{minipage}
 \hfill
 \begin{minipage}{0.35\linewidth}
@@ -193,7 +177,7 @@ Since labeled audios often include sources of external noise, which does not cor
   \includegraphics[width=\linewidth]{img/train_spectrogram_12_dbscan.png}
 \end{minipage}
 
-At a first glance, we noticed that clustering produced extremely thin and 'dispersed' groupings. In order to enforce wider windows, we also experimented with different ways to enforce continuity of the clusters in time: first encouraging time continuity by adding the time index to the data as an additional column, and second by experimenting with enforcing it as a hardcoded constraint. In both cases, we were unable to produce distinct results that could be usable for an initial filtering. Additionally, we tested K-means clustering, using the primary and secondary labels as a reference for the number of clusters, including an additional cluster for 'unlabeled' samples. While parameter tuning could yield reasonable clusters in individual cases, the method's performance degraded significantly across recordings with different background conditions or device setups.
+At a first glance, we noticed that clustering produced extremely thin and 'dispersed' groupings. In order to enforce wider windows, we also experimented with different ways to enforce continuity of the clusters in time: first encouraging time continuity by adding the time index to the data as an additional column, and second by experimenting with enforcing it as a hardcoded constraint. In both cases, we were unable to produce distinct results that could be usable for an initial filtering. While parameter tuning could yield reasonable clusters in individual cases, the method's performance degraded significantly across recordings with different background conditions or device setups.
 
 In all cases, we were unable to refine the clusters parameters to work over multiple audio files. As a resutl, we concluded that clustering methods are ineffective for isolating bird calls from raw audio, particularly in unlabeled data. Given their limited robustness and generalization, we moved to exploring alternative ways of extracting animal calls, detailing our methods in the following sections.
 
@@ -207,8 +191,6 @@ We first leveraged the rating system available in the Xeno-Canto dataset:
   \item Found two species (Jaguar '41970' and Spotted Foam-nest Frog '126247') that would be lost if excluded by rating.
   \item Implemented a preservation strategy by retaining the top 5 highest-rated examples of at-risk species.
 \end{itemize}
-
-This approach ensured we maintained representation across all 206 taxonomy labels while improving overall data quality.
 
 \subsection*{YAMNet Audio Classification}
 
@@ -238,14 +220,14 @@ This two-stage approach allowed us to produce different refinements of the datas
 To improve generalization and robustness in our models, we applied multiple spectrogram augmentation techniques during training. We leveraged both labeled and unlabeled audio data to increase variability and mitigate class imbalance. The augmentations included:
 
 \begin{enumerate}
-  \item \textbf{SpecAugment-based Transformations}
+  \item \textbf{SpecAugment-based Transformations} \cite{specaugment}
     \begin{itemize}
       \item \textit{Time masking}: Random horizontal stripes (time axis) were zeroed to simulate occluded temporal segments.
       \item \textit{Frequency masking}: Random vertical stripes (frequency axis) were zeroes to simulate missing spectral bands.
       \item \textit{Random brightness and contrast adjustments}: Gain and bias varied to simulate different recording conditions, intensity clamped to a normalized [0, 1] range.
     \end{itemize}
 
-  \item \textbf{Mixup Augmentation}
+  \item \textbf{Mixup Augmentation} \cite{mixup_survey}
 
     Input batches were augmented using the Mixup technique, where pairs of samples were linearly interpolated:
     \begin{itemize}
@@ -295,7 +277,7 @@ Light  & 3      & 0.8      & 0.0402   & 5a6176d1 \\
 \end{minipage}
 \subsection*{EfficientNet}
 
-After our limited successes in training models from scratch, we opted to try a different approach: applying \emph{transfer learning} and filtering the datasets as little as possible.
+After our limited successes in training models from scratch, we opted to try a different approach: applying \emph{transfer learning} and filtering the datasets as little as possible \cite{efficientnet}.
 
 As an initial step, we tested the model's ability to fit to the data, observing a high training accuracy ($0.77$ and $0.76$) on both All and Light datasets with one-hot encoding ($m=1.0$). As expected, taking more data corresponded to obtaining a higher accuracy, and these models significantly surpassed the baseline.
 
@@ -337,11 +319,7 @@ Through the experiments, we noticed clear signs of overfitting: the model reache
 
 \begin{minipage}{0.48\linewidth}
 
-In our training experiments, we considered $\text{m} \in \{0.7, 0.8, 1.0\}$, yet we always observed better results with $\text{m} = 1$, that is, one-hot encoding.
-
-A simple model like the MelCNN was not able to capture the full image of the data, which was particularly clear when observing the much higher accuracy score of the EfficientNet variation.
-
-Given the limited amounts of data, overfitting was a real concern, warranting the use of more sophisticated techniques to avoid it, notably Balanced Accuracy and Cross-Fold validation.
+In our training experiments, we considered $\text{m} \in \{0.7, 0.8, 1.0\}$, yet we always observed better results with $\text{m} = 1$, that is, one-hot encoding. A simple model like the MelCNN was not able to capture the full image of the data, which was particularly clear when observing the much higher accuracy score of the EfficientNet variation. Given the limited amounts of data, overfitting was a real concern, warranting the use of more sophisticated techniques to avoid it, notably Balanced Accuracy and Cross-Fold validation.
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\linewidth}
@@ -407,7 +385,7 @@ Plotting the training performance for the second stage of training, we observed 
 To compare the final performance of the models, we used Kaggle's hidden test feature, since the full model was trained on the complete dataset, leaving no data for the validation step.
 
 \begin{minipage}{0.48\linewidth}
-We tracked the effect of various training changes to accuracy: augmenting underrepresented classes, running Curriculum Learning with the Soundscapes and taking different stages throughout the training phase of the model. In general, we saw worse performance when augmenting underrepresented classes. This effect was particularly obvious when training on the original train dataset. Moreover, later folds of training on the soundscape dataset performed worse (commit hash 6f4a47ac).
+We tracked the effect of various training changes to accuracy: augmenting underrepresented classes, running Curriculum Learning \cite{curriculum_learning} with the Soundscapes and taking different stages throughout the training phase of the model. In general, we saw worse performance when augmenting underrepresented classes. This effect was particularly obvious when training on the original train dataset. Moreover, later folds of training on the soundscape dataset performed worse (commit hash 6f4a47ac).
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\linewidth}
@@ -431,11 +409,11 @@ We were unsuccessful at improving the performance of the model beyond the state-
 
 The code for the investigation was developed in Python, using a mix of Python scripts and Jupyter notebooks depending on our need for interactivity. For instance, model scripts were written as \texttt{.py} files, while exploratory graphs and one-time data operations were handled in interactive notebooks. Once specifc notebook code blocks reached maturity, we exported them to standalone scripts. Version control was managed using Git, with the repository hosted on GitHub. Overall, we were satisfied with this structure.
 
-We performed less intensive operations on our personal laptops, such as coding or test-running the models on a small batch of the data. On the other time, training and other data-heavy tasks were automated using shell scripts, which were submitted to the High Performance Cluster (HPC) available to us through our university, \textit{Università Commerciale Luigi Bocconi}. We relied on shell utilities for most data transfers between our local devices and the HPC, referencing results by their Git commit hash for reproducibility.
+We performed less intensive operations on our personal laptops, such as coding or test-running the models on a small batch of the data. On the other time, training and other data-heavy tasks were automated using shell scripts, which were submitted to the High Performance Cluster (HPC) available to us through our university, \textit{Università Commerciale Luigi Bocconi}\cite{unibocconi}. We relied on shell utilities for most data transfers between our local devices and the HPC, referencing results by their Git commit hash for reproducibility.
 
 Initially, we experimented with different models and introduced flexible hyperparameter configurations to increase generality. Eventually we found ourselves developing two models (MelCNN and EfficientNet), while only being seriously interested in one of them, which consumed time that would have been better spent developing new models. In hindsight, a more solution-oriented, version history, ie. keeping the code lighter and hardcoding more variables, would have been more time efficient.
 
-We tracked our efforts using custom time-tracking tools: the org-mode library in Emacs and Clockwork, an independently developed productivity utility. The bulk of the project was completed in approximately 100 hours over the course of six weeks, which produced over 150 commits.
+We tracked our efforts using custom time-tracking tools: the org-mode library \cite{doom_emacs} in Emacs \cite{gnu_emacs} and Clockwork \cite{clockwork}, an independently developed productivity utility. The bulk of the project was completed in approximately 100 hours over the course of six weeks, which produced over 150 commits.
 
 \section*{Conclusion}
 This study investigated machine learning approaches for automated species classification in the BirdCLEF 2025 challenge, evaluating how fundamental challenges of extreme class imbalance and limited labeled data influence ecological audio analysis, using data taken from Colombia's Middle Magdalena Valley. We relied on Mel spectrograms, and observed that clustering approaches are ineffective for audio segmentation, which we attributed to qualitative differences between recordings. We then studied the performance of a simple MelCNN architecture and a 'Naive' EfficientNet B0 implementation, using loss, accuracy and balanced accuracy. Using an 80-20 train-test data split, we obtained an accuracy score of approximately 0.45, and balanced accuracy of 0.30. We also attempted to filter the data to obtain a refined dataset: we used Google's Yamnet classifier to produce labels of the samples, but we achieved only marginal improvements when filtering the data. Instead, we mostly a loss in performance when reducing the data in any way, despite preserving more than 80\% of the samples and guaranteeing label preservation. We also attempted to use secondary labels in training with soft labelling. However, all models performed better with one-hot encoding. Finally, we compared our results with a tweaked EfficientNet B0 implementation, which substantially outperformed our custom MelCNN and naive EfficientNet architecture. The state-of-the-art solution achieving validation accuracy up to 0.498, using 90\% of the training data with 5 k-folds, and a Kaggle hidden dataset score of 0.78. As a successive step, we implemented semi-supervised learning, adding pseudo-labels to the unlabeled soundscape data and continuing training of a model for a different number of times and data augmentation for underrepresented labels. Despite these efforts, we failed to improve performance beyond the baseline, with our best model achieving 0.781 accuracy on the Kaggle scoreboard. While we did not surpass state-of-the-art performance, this comprehensive analysis provides insights into the challenges of ecological audio classification and demonstrates that traditional techniques may not transfer effectively to highly imbalanced ecological datasets, suggesting future research should focus on few-shot learning and domain-specific methods tailored to biodiversity monitoring applications.
@@ -446,6 +424,9 @@ This study investigated machine learning approaches for automated species classi
 
 \bibitem{birdclef2025}
 BirdCLEF 2025 -- Kaggle Competition. \url{https://www.kaggle.com/competitions/birdclef-2025} (accessed June 1, 2025).
+
+\bibitem{mel_cepstrum}
+Mel-frequency cepstrum. \url{https://en.wikipedia.org/wiki/Mel-frequency_cepstrum} (accessed June 1, 2025).
 
 \bibitem{efficientnet}
 EfficientNet -- Wikipedia. \url{https://en.wikipedia.org/wiki/EfficientNet} (accessed June 1, 2025).
@@ -458,9 +439,6 @@ Mixup Augmentation - A survey on Image Data Augmentation for Deep Learning. \url
 
 \bibitem{curriculum_learning}
 Curriculum Learning -- Wikipedia. \url{https://en.wikipedia.org/wiki/Curriculum_learning} (accessed June 1, 2025).
-
-\bibitem{mel_cepstrum}
-Mel-frequency cepstrum. \url{https://en.wikipedia.org/wiki/Mel-frequency_cepstrum} (accessed June 1, 2025).
 
 \bibitem{unibocconi}
 Università Commerciale Luigi Bocconi. \url{https://www.unibocconi.it/it} (accessed June 1, 2025).
